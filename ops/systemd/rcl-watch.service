@@ -1,0 +1,21 @@
+[Unit]
+Description=RCL Watch Next.js service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/data/rcl/rcl-watch
+Environment=NODE_ENV=production
+Environment=PORT=3004
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=-/etc/default/rcl-watch
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 ## Core Docs
 
 - `docs/DEVLOG.md` - pointed implementation notes and issues encountered while building the viewer.
+- `docs/DEPLOYMENT_NGINX.md` - systemd + nginx production deploy for `watch.retrocyclesleague.com`.
 
 ## Code Map
 
