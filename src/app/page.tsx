@@ -1,66 +1,48 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import Link from "next/link";
+
+const DEMO_MATCH_ID = "69b85ba1c5015455ee9b0412";
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="home-shell">
+      <section className="home-card">
+        <header className="brand">
+          <span className="brand-mark">
+            Retrocycles <em>League</em>
+          </span>
+          <span className="brand-tag">RCL · WATCH</span>
+        </header>
+
+        <p className="eyebrow">Cinematic match playback</p>
+        <h1 className="display">
+          Replay the
+          <br />
+          <span className="ghost">Grid</span>
+        </h1>
+        <p className="lede">
+          Reconstructed Armagetron matches from cached tronstats logs — accurate cycle physics, finite walls that
+          recede along the odometer, the shrinking sumo zone, and explosions on death. Built for the Retrocycles League.
+        </p>
+
+        <ul className="feature-row">
+          <li className="feature">
+            <strong>True wall physics</strong>
+            <span>CYCLE_WALL_LENGTH 400 + 8s death decay</span>
+          </li>
+          <li className="feature">
+            <strong>Sumo zone</strong>
+            <span>The fortress shrinks as the round runs</span>
+          </li>
+          <li className="feature">
+            <strong>Director cameras</strong>
+            <span>Cinematic, smart follow, and cycle POV</span>
+          </li>
+        </ul>
+
+        <Link className="launch-link" href={`/watch/${DEMO_MATCH_ID}`}>
+          Launch demo playback ▸
+        </Link>
+      </section>
+    </main>
   );
 }
