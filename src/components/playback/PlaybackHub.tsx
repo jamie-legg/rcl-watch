@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CinematicScene, type PlaybackCameraMode } from "@/components/playback/CinematicScene";
+import { useMatchAudio } from "@/components/playback/useMatchAudio";
 import {
   DEFAULT_PHYSICS,
   DEFAULT_ZONE,
@@ -45,6 +46,85 @@ async function readStreamWithProgress(
   return parts.join("");
 }
 
+type SelectOption = { value: string; label: string };
+
+// RCL-branded replacement for the native <select>: a trigger button + a popover list that
+// opens upward (the control bar lives at the bottom of the theater). Closes on outside click
+// or Escape.
+function RclSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onPointer = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`rcl-select${open ? " is-open" : ""}`} ref={ref}>
+      <span className="rcl-select__label">{label}</span>
+      <button
+        type="button"
+        className="rcl-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="rcl-select__value">{current?.label ?? "—"}</span>
+        <span className="rcl-select__chevron" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <ul className="rcl-select__menu" role="listbox">
+          {options.map((option) => (
+            <li
+              key={option.value}
+              role="option"
+              aria-selected={option.value === value}
+              className={`rcl-select__option${option.value === value ? " is-selected" : ""}`}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -69,6 +149,8 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
   const [speed, setSpeed] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState(AUTO_PLAYER);
   const [cameraMode, setCameraMode] = useState<PlaybackCameraMode>("cinematic");
+  const [fov, setFov] = useState(52);
+  const [autoNext, setAutoNext] = useState(false);
 
   const [collapsed, setCollapsed] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
@@ -77,6 +159,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
   const [physics, setPhysics] = useState<PhysicsSettings>(DEFAULT_PHYSICS);
   const [zone, setZone] = useState<ZoneSettings>(DEFAULT_ZONE);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
 
   const theaterRef = useRef<HTMLDivElement>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,11 +253,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
 
       setTime((current) => {
         const next = current + delta * speed;
-        if (next >= round.duration) {
-          setPlaying(false);
-          return round.duration;
-        }
-        return next;
+        return next >= round.duration ? round.duration : next;
       });
 
       frame = requestAnimationFrame(tick);
@@ -183,6 +262,22 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [playing, round, speed]);
+
+  // End-of-round handling: auto-advance to the next round if enabled, otherwise stop.
+  useEffect(() => {
+    if (!playing || !round || !timeline) {
+      return;
+    }
+    if (time < round.duration) {
+      return;
+    }
+    if (autoNext && roundIndex < timeline.rounds.length - 1) {
+      setRoundIndex(roundIndex + 1);
+      setTime(0);
+    } else {
+      setPlaying(false);
+    }
+  }, [time, playing, round, timeline, autoNext, roundIndex]);
 
   const revealControls = useCallback(() => {
     setControlsHidden(false);
@@ -262,6 +357,8 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [time, seek, toggleFullscreen, revealControls]);
 
+  useMatchAudio({ round, time, playing, speed, enabled: soundOn, zoneEnabled: zone.enabled });
+
   if (loadError) {
     return (
       <main className="shell empty-state">
@@ -331,6 +428,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
           time={time}
           selectedPlayer={selectedPlayerName}
           cameraMode={cameraMode}
+          fov={fov}
           physics={physics}
           zone={zone}
         />
@@ -512,55 +610,64 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
           </div>
 
           <div className="control-group control-selects">
-            <label>
-              <span>Round</span>
-              <select
-                value={roundIndex}
-                onChange={(event) => {
-                  setRoundIndex(Number(event.target.value));
-                  setTime(0);
-                  setPlaying(false);
-                }}
-              >
-                {timeline.rounds.map((item) => (
-                  <option key={item.id} value={item.index}>
-                    {item.index + 1} ({formatTime(item.duration)})
-                  </option>
-                ))}
-              </select>
+            <RclSelect
+              label="Round"
+              value={String(roundIndex)}
+              options={timeline.rounds.map((item) => ({
+                value: String(item.index),
+                label: `${item.index + 1} (${formatTime(item.duration)})`,
+              }))}
+              onChange={(value) => {
+                setRoundIndex(Number(value));
+                setTime(0);
+                setPlaying(false);
+              }}
+            />
+
+            <RclSelect
+              label="Speed"
+              value={String(speed)}
+              options={SPEED_OPTIONS.map((option) => ({ value: String(option), label: `${option}x` }))}
+              onChange={(value) => setSpeed(Number(value))}
+            />
+
+            <RclSelect
+              label="POV"
+              value={selectedPlayer}
+              options={[
+                { value: AUTO_PLAYER, label: "Auto director" },
+                ...round.players.map((player) => ({ value: player.username, label: player.username })),
+              ]}
+              onChange={(value) => setSelectedPlayer(value)}
+            />
+
+            <RclSelect
+              label="Camera"
+              value={cameraMode}
+              options={[
+                { value: "cinematic", label: "Cinematic" },
+                { value: "follow", label: "Follow" },
+                { value: "pov", label: "POV" },
+                { value: "noclip", label: "Noclip (free fly)" },
+              ]}
+              onChange={(value) => setCameraMode(value as PlaybackCameraMode)}
+            />
+
+            <label className="control-slider">
+              <span>FOV · {fov}°</span>
+              <input
+                type="range"
+                min={30}
+                max={110}
+                step={1}
+                value={fov}
+                onChange={(event) => setFov(Number(event.target.value))}
+              />
             </label>
 
-            <label>
-              <span>Speed</span>
-              <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                {SPEED_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}x
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span>POV</span>
-              <select value={selectedPlayer} onChange={(event) => setSelectedPlayer(event.target.value)}>
-                <option value={AUTO_PLAYER}>Auto director</option>
-                {round.players.map((player) => (
-                  <option key={player.username} value={player.username}>
-                    {player.username}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span>Camera</span>
-              <select value={cameraMode} onChange={(event) => setCameraMode(event.target.value as PlaybackCameraMode)}>
-                <option value="cinematic">Cinematic</option>
-                <option value="follow">Follow</option>
-                <option value="pov">POV</option>
-                <option value="noclip">Noclip (free fly)</option>
-              </select>
+            <label className="control-check">
+              <input type="checkbox" checked={autoNext} onChange={(event) => setAutoNext(event.target.checked)} />
+              <span>Auto next round</span>
             </label>
           </div>
 
@@ -580,6 +687,14 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
               onClick={() => setShowPhysics((value) => !value)}
             >
               Physics
+            </button>
+            <button
+              type="button"
+              className={soundOn ? "icon-button active" : "icon-button"}
+              aria-label={soundOn ? "Mute" : "Unmute"}
+              onClick={() => setSoundOn((value) => !value)}
+            >
+              {soundOn ? "🔊" : "🔇"}
             </button>
             <button type="button" className="icon-button" aria-label="Fullscreen" onClick={toggleFullscreen}>
               {isFullscreen ? "⤢" : "⛶"}

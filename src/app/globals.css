@@ -649,6 +649,170 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
+/* RCL-branded custom select */
+.rcl-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.rcl-select__label {
+  white-space: nowrap;
+}
+
+.rcl-select__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.rcl-select__trigger:hover {
+  border-color: var(--line-strong);
+}
+
+.rcl-select.is-open .rcl-select__trigger {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(198, 245, 52, 0.1);
+}
+
+.rcl-select__value {
+  white-space: nowrap;
+}
+
+.rcl-select__chevron {
+  font-size: 0.62rem;
+  color: var(--accent);
+  transition: transform 160ms ease;
+}
+
+.rcl-select.is-open .rcl-select__chevron {
+  transform: rotate(180deg);
+}
+
+.rcl-select__menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  min-width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+.rcl-select__option {
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.rcl-select__option:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rcl-select__option.is-selected {
+  color: #08130a;
+  background: linear-gradient(135deg, var(--accent), #e7ff7a);
+}
+
+/* In-scene cycle name labels (drei <Html>) */
+.cycle-label-wrap {
+  pointer-events: none;
+}
+
+.cycle-label {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--cycle) 65%, transparent);
+  background: rgba(6, 9, 16, 0.82);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.5);
+  transform: translateZ(0);
+}
+
+.cycle-label::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--cycle);
+  box-shadow: 0 0 8px var(--cycle);
+  vertical-align: middle;
+}
+
+.cycle-label.is-selected {
+  color: #08130a;
+  border-color: var(--cycle);
+  background: var(--cycle);
+  text-shadow: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.cycle-label.is-selected::before {
+  background: #08130a;
+  box-shadow: none;
+}
+
+.control-slider {
+  min-width: 132px;
+}
+
+.control-slider input[type="range"] {
+  width: 96px;
+}
+
+.control-check {
+  cursor: pointer;
+}
+
+.control-check input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
 .icon-button {
   display: inline-flex;
   align-items: center;

@@ -57,6 +57,8 @@ export type PlayerState = PlaybackSample & {
   color: string;
   active: boolean;
   heading: number;
+  /** Cumulative odometer distance (∫speed·dt) at this time — drives wheel spin. */
+  distance: number;
 };
 
 export type TrailSegment = {
@@ -336,6 +338,7 @@ function withVisualState(sample: PlaybackSample, track: PlayerTrack, active: boo
     color: track.color,
     active,
     heading: Math.atan2(-sample.dirY, sample.dirX),
+    distance: headDistanceAtTime(track, sample.time),
   };
 }
 

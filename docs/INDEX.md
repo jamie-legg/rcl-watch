@@ -19,8 +19,10 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 - `src/lib/playback.ts` - log normalization, interpolation, trail derivation, playback types, and cycle physics: finite wall length recession measured along the odometer (∫speed·dt), post-death wall stay-up removal, explosion events, and the shrinking sumo zone. Exposes `PhysicsSettings`/`DEFAULT_PHYSICS`, `ZoneSettings`/`DEFAULT_ZONE`, `zoneRadiusAt`.
 - `src/types/tstLog.ts` - raw `TstGridposLog` shape from the tronstats API.
 - `src/app/globals.css` - RCL-branded global styles (lime/magenta palette, grid texture, theater + landing layout).
-- `src/components/playback/PlaybackHub.tsx` - fullscreen "theater" client shell: playback state, auto-hiding YouTube-style toolbar, players panel, and tunable physics & zone panel.
-- `src/components/playback/CinematicScene.tsx` - Three.js/R3F arena, cycles, per-side-tinted receding/fading trails, shrinking sumo zone, explosion bursts, lighting, shadows, and cameras.
+- `src/components/playback/PlaybackHub.tsx` - fullscreen "theater" client shell: playback state, auto-hiding YouTube-style toolbar (RCL-branded `RclSelect` dropdowns, FOV slider, auto-next-round toggle), players panel, and tunable physics & zone panel.
+- `src/components/playback/CinematicScene.tsx` - Three.js/R3F arena, cycles, billboarded name labels (drei `<Html>`), per-side-tinted receding/fading trails, shrinking sumo zone, explosion bursts, lighting, shadows, and cameras (with a settable `fov`). Skinned with the original Armagetron Advanced textures (floor/dir_wall/rim_wall/sky/cycle_body/cycle_wheel from `public/aa/textures`); cycle bodies use planar-projected UVs + player-colour-blended `CanvasTexture`s and bank into turns (`leanAt`/`trackTurns`, mirroring the game's `skew`).
+- `src/components/playback/useMatchAudio.ts` - timeline-synced audio (engine loop, death explosions, round-start "GO", zone spawn) using the original AA sounds in `public/aa/sound`.
+- `public/aa/` - original Armagetron Advanced art, models (`cycle_body/front/rear.obj`), and sound assets imported from the game checkout.
 
 ## External References
 
