@@ -12,7 +12,7 @@ export type TstGridposLog = {
   PosY: number;
   RoundId: string;
   ElapsedTime: number;
-  Id: string;
+  Id: string | null;
 };
 
 export function isTstGridposLog(value: unknown): value is TstGridposLog {
@@ -25,7 +25,6 @@ export function isTstGridposLog(value: unknown): value is TstGridposLog {
     typeof log.Username === "string" &&
     typeof log.Team === "string" &&
     typeof log.RoundId === "string" &&
-    typeof log.Id === "string" &&
     typeof log.PosX === "number" &&
     typeof log.PosY === "number" &&
     typeof log.DirX === "number" &&

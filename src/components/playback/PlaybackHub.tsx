@@ -10,7 +10,7 @@ import {
   type PhysicsSettings,
   type ZoneSettings,
 } from "@/lib/playback";
-import type { TstGridposLog } from "@/types/tstLog";
+import { isTstGridposLog, type TstGridposLog } from "@/types/tstLog";
 
 type PlaybackHubProps = {
   matchId: string;
@@ -20,10 +20,48 @@ const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2, 4];
 const AUTO_PLAYER = "__auto";
 const IDLE_HIDE_MS = 2800;
 
+async function readStreamWithProgress(
+  body: ReadableStream<Uint8Array>,
+  total: number,
+  onProgress: (received: number) => void,
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let received = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    received += value.byteLength;
+    parts.push(decoder.decode(value, { stream: true }));
+    onProgress(received);
+  }
+
+  parts.push(decoder.decode());
+  void total;
+  return parts.join("");
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function PlaybackHub({ matchId }: PlaybackHubProps) {
   const [logs, setLogs] = useState<TstGridposLog[] | null>(null);
   const [cacheSource, setCacheSource] = useState("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const [loadedBytes, setLoadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
   const timeline = useMemo(() => (logs ? normalizeMatchLogs(logs) : null), [logs]);
   const [roundIndex, setRoundIndex] = useState(0);
   const [time, setTime] = useState(0);
@@ -62,22 +100,50 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
           cache: "no-store",
           signal: controller.signal,
         });
-        const data: unknown = await response.json();
 
         if (!response.ok) {
-          const message =
-            data && typeof data === "object" && "error" in data && typeof data.error === "string"
-              ? data.error
-              : "Unable to load match logs.";
+          let message = "Unable to load match logs.";
+          try {
+            const errorBody: unknown = await response.json();
+            if (
+              errorBody &&
+              typeof errorBody === "object" &&
+              "error" in errorBody &&
+              typeof errorBody.error === "string"
+            ) {
+              message = errorBody.error;
+            }
+          } catch {
+            // non-JSON error body; keep the default message
+          }
           throw new Error(message);
         }
 
+        setCacheSource(response.headers.get("x-watch-cache") ?? "unknown");
+        const total = Number(response.headers.get("x-watch-bytes") ?? response.headers.get("content-length")) || 0;
+        setTotalBytes(total);
+
+        const text = response.body
+          ? await readStreamWithProgress(response.body, total, (received) => {
+              setLoadedBytes(received);
+              setLoadProgress(total > 0 ? Math.min(1, received / total) : null);
+            })
+          : await response.text();
+
+        const data: unknown = JSON.parse(text);
+
         if (!Array.isArray(data)) {
-          throw new Error("The cached log API returned an unexpected response.");
+          throw new Error("The log API returned an unexpected response.");
         }
 
-        setLogs(data as TstGridposLog[]);
-        setCacheSource(response.headers.get("x-watch-cache") ?? "unknown");
+        const valid = data.filter(isTstGridposLog);
+
+        if (valid.length === 0) {
+          throw new Error("No usable logs were returned for this match.");
+        }
+
+        setLoadProgress(1);
+        setLogs(valid);
       } catch (error) {
         if (!controller.signal.aborted) {
           setLoadError(error instanceof Error ? error.message : "Unable to load match logs.");
@@ -207,11 +273,31 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
   }
 
   if (!timeline) {
+    const pct = loadProgress != null ? Math.round(loadProgress * 100) : null;
+    const determinate = pct != null;
+    const sizeReadout =
+      loadedBytes > 0
+        ? totalBytes > 0
+          ? `${formatBytes(loadedBytes)} / ${formatBytes(totalBytes)}`
+          : `${formatBytes(loadedBytes)} downloaded`
+        : null;
+
     return (
-      <main className="shell empty-state">
-        <p className="eyebrow">RCL Watch</p>
-        <h1>Loading cached match logs.</h1>
-        <p>The first request may fetch from tronstats and write the local file cache. Later requests should read from disk.</p>
+      <main className="shell empty-state loading-state">
+        <p className="eyebrow">Retrocycles League · Watch</p>
+        <h1>Loading match…</h1>
+        <div className="load-bar" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+          <span className={determinate ? "load-fill" : "load-fill indeterminate"} style={determinate ? { width: `${pct}%` } : undefined} />
+        </div>
+        <p className="load-meta">
+          {determinate ? `${pct}%` : "Streaming…"}
+          {sizeReadout ? ` · ${sizeReadout}` : ""}
+          {` · cache: ${cacheSource}`}
+        </p>
+        <p>
+          First load streams the full log set from tronstats (often 15–20&nbsp;MB over a slow connection) and caches it
+          locally. Once cached, this match opens instantly.
+        </p>
       </main>
     );
   }

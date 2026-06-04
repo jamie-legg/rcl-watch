@@ -315,7 +315,7 @@ export function formatTime(seconds: number): string {
 
 function toSample(log: TstGridposLog): PlaybackSample {
   return {
-    id: log.Id,
+    id: log.Id ?? `${log.Username}@${log.RoundId}:${log.ElapsedTime}`,
     username: log.Username,
     team: log.Team,
     time: log.ElapsedTime,

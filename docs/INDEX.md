@@ -9,10 +9,12 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 ## Code Map
 
 - `Makefile` - local dev, smoke-test, cleanup, cache, and release-check utilities.
-- `src/app/page.tsx` - landing page linking to the demo match playback route.
+- `src/app/page.tsx` - match selector home: server-rendered, TST/Fort tabs (via `?mode=`), paginated match cards (via `?page=`) linking to the playback route. Does not fetch any per-match logs.
 - `src/app/watch/[matchId]/page.tsx` - server-rendered match page that loads cached logs by match id.
-- `src/app/api/logs/[matchId]/route.ts` - raw cached log API endpoint.
-- `src/lib/tronLogs.ts` - server-side fetch and file-cache helper for `GetLogsForMatch`.
+- `src/app/api/logs/[matchId]/route.ts` - streaming log API: cache hits stream off disk with a real `Content-Length`/`x-watch-bytes`; cold loads tee the upstream stream to the client while caching a copy, so the client can render live download progress.
+- `src/lib/tronLogs.ts` - server-side fetch and file-cache helper for `GetLogsForMatch` (immutable logs cached forever).
+- `src/lib/tronMatches.ts` - server-side match-list helper for `MatchHistory/Get{Tst,Fort}Matches`: `React.cache` dedupes per request, plus a 60s TTL file cache (`.cache/match-lists/{mode}-p{page}.json`) with stale-on-error fallback.
+- `src/types/tstMatch.ts` - `MatchSummary`/`MatchTeam`/`MatchPlayer` shapes + validators for the match-history API.
 - `src/lib/playback.ts` - log normalization, interpolation, trail derivation, playback types, and cycle physics: finite wall length recession measured along the odometer (∫speed·dt), post-death wall stay-up removal, explosion events, and the shrinking sumo zone. Exposes `PhysicsSettings`/`DEFAULT_PHYSICS`, `ZoneSettings`/`DEFAULT_ZONE`, `zoneRadiusAt`.
 - `src/types/tstLog.ts` - raw `TstGridposLog` shape from the tronstats API.
 - `src/app/globals.css` - RCL-branded global styles (lime/magenta palette, grid texture, theater + landing layout).
