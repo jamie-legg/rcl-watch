@@ -64,6 +64,10 @@ export default async function Home({ searchParams }: HomeProps) {
             <em>{item.tag}</em>
           </Link>
         ))}
+        <Link className="tab" href="/tournaments" prefetch={false}>
+          View Tournament
+          <em>.aarec replays</em>
+        </Link>
       </nav>
 
       {failed ? (

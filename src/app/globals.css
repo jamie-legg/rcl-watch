@@ -605,19 +605,212 @@ select {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 16px;
 }
 
-.control-group {
+.control-cluster {
   display: flex;
   align-items: center;
+  gap: 6px;
+}
+
+.control-cluster--transport {
   gap: 8px;
 }
 
-.control-selects {
+.control-cluster--selects {
   flex: 1 1 auto;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+.control-cluster--panels {
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.control-divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+/* Modern flat icon buttons for the control bar */
+.ctl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease, border-color 140ms ease;
+}
+
+.ctl-btn svg {
+  display: block;
+}
+
+.ctl-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ctl-btn:active {
+  transform: scale(0.93);
+}
+
+.ctl-btn.is-active {
+  color: var(--accent);
+  background: rgba(198, 245, 52, 0.14);
+}
+
+/* Transport buttons get a subtle bezel so they read as the primary controls. */
+.control-cluster--transport .ctl-btn {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.control-cluster--transport .ctl-btn:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.control-cluster--transport .ctl-btn.is-active {
+  border-color: var(--accent);
+}
+
+/* Scoped under the transport cluster so it beats the cluster's bezel override
+   (.control-cluster--transport .ctl-btn) — otherwise the play button rendered dark. */
+.control-cluster--transport .ctl-btn.ctl-btn--primary {
+  width: 54px;
+  height: 48px;
+  border: 0;
+  color: #08130a;
+  background: linear-gradient(135deg, var(--accent), #e7ff7a);
+  box-shadow: 0 8px 26px rgba(198, 245, 52, 0.28);
+}
+
+.control-cluster--transport .ctl-btn.ctl-btn--primary:hover {
+  filter: brightness(1.06);
+  background: linear-gradient(135deg, var(--accent), #e7ff7a);
+}
+
+.control-cluster--transport .ctl-btn.ctl-btn--primary svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Debug / FPS overlay */
+.debug-hud {
+  position: absolute;
+  top: 84px;
+  left: 18px;
+  z-index: 65;
+  display: grid;
+  gap: 3px;
+  min-width: 168px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(3, 4, 10, 0.82);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.debug-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.debug-row span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+}
+
+.debug-row b {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Round-start countdown — modelled on the game's centred announcer text (gGame.cpp
+   con.CenterDisplay): a clean number that appears, holds, then fades, with the voice
+   announcer carrying it. Deliberately understated, not a flashy HUD number. */
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: radial-gradient(circle at center, rgba(3, 4, 10, 0.22), transparent 62%);
+}
+
+.countdown-number {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: clamp(4.5rem, 13vw, 9rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 3px 22px rgba(0, 0, 0, 0.65);
+  animation: countdown-tick 1s ease-out forwards;
+}
+
+.countdown-number.is-go {
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 34px rgba(198, 245, 52, 0.55), 0 3px 22px rgba(0, 0, 0, 0.6);
+  animation: countdown-go 0.8s ease-out forwards;
+}
+
+@keyframes countdown-tick {
+  0% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+  16% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes countdown-go {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .control-selects label {
@@ -754,19 +947,35 @@ input[type="range"] {
 }
 
 .cycle-label {
-  display: inline-block;
-  padding: 3px 9px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--cycle) 65%, transparent);
   background: rgba(6, 9, 16, 0.82);
   color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
   white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.5);
   transform: translateZ(0);
+}
+
+.cycle-label strong {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.cycle-label em {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.55;
+}
+
+.cycle-label.is-selected em {
+  opacity: 0.7;
 }
 
 .cycle-label::before {
@@ -856,7 +1065,10 @@ input[type="range"] {
   bottom: 16px;
   z-index: 60;
   transform: translateX(-50%);
-  padding: 9px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px 9px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: rgba(3, 4, 10, 0.82);
@@ -867,6 +1079,11 @@ input[type="range"] {
   text-transform: uppercase;
   cursor: pointer;
   backdrop-filter: blur(10px);
+}
+
+.theater-restore svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Floating side panels (roster + physics) */
@@ -897,10 +1114,154 @@ input[type="range"] {
   left: 18px;
 }
 
+/* Distinct corners so panels never overlap when several are open. */
+.theater-settings {
+  left: auto;
+  right: 18px;
+}
+
+.theater-sound {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.theater-scoreboard {
+  right: auto;
+  left: 18px;
+}
+
 .theater-roster.is-hidden,
 .theater-physics.is-hidden {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Event console: top-left, distinct from the bottom-left scoreboard. */
+.theater-console {
+  right: auto;
+  left: 18px;
+  bottom: auto;
+  top: 90px;
+  width: min(360px, 86vw);
+}
+
+.console-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 42vh;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+}
+
+.console-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.console-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+
+.console-text {
+  flex: 1;
+}
+
+.console-team {
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.console-line--round .console-text {
+  color: #c6f534;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.console-line--elimination .console-text {
+  color: #ff8f6b;
+}
+
+.console-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.scoreboard-teams {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scoreboard-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.scoreboard-team h4 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scoreboard-score {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreboard-team ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scoreboard-team li {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--foreground);
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.scoreboard-team li.is-selected {
+  background: rgba(198, 245, 52, 0.14);
+  color: var(--accent);
+}
+
+.scoreboard-team li.is-dead {
+  color: var(--muted);
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.scoreboard-alive {
+  margin: 0 0 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .theater-roster header,
@@ -1025,7 +1386,7 @@ input[type="range"] {
     text-align: left;
   }
 
-  .control-selects {
+  .control-cluster--selects {
     width: 100%;
     order: 3;
     justify-content: space-between;

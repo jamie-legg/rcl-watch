@@ -390,13 +390,24 @@ function buildRoundTracks(
       const previous = samples[index - 1];
       const current = samples[index];
       const distance = Math.hypot(current.x - previous.x, current.y - previous.y);
-
-      if (distance < 0.04 || distance > 8) {
-        continue;
-      }
-
       const odoStart = odometer[index - 1];
       const odoEnd = odometer[index];
+      const odoSpan = odoEnd - odoStart;
+      const dt = current.time - previous.time;
+
+      // Skip non-moves and discontinuities (teleports / respawns / desyncs)
+      // rather than bridging them with a bogus wall. A real move's straight-line
+      // distance can't exceed the odometer span (∫speed·dt ≈ path length) by much;
+      // when it does, or the gap is long, there's no wall to draw. This replaces a
+      // fixed distance cap that assumed dense logs and discarded every sparse
+      // aarec move (enemy cycles sync only ~1×/sec, so legitimate gaps are large).
+      if (distance < 0.04) {
+        continue;
+      }
+      const reach = Math.max(odoSpan, Math.max(previous.speed, current.speed) * dt);
+      if (dt > 5 || distance > reach * 1.6 + 4) {
+        continue;
+      }
       const segments = buildMoveSegments(track, previous, current);
       const geomTotal = segments.reduce((sum, segment) => sum + distanceBetween(segment.from, segment.to), 0);
       let geomAccumulated = 0;

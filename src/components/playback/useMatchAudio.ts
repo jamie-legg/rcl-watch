@@ -8,6 +8,9 @@ const SND = {
   engine: "/aa/sound/cyclrun.ogg",
   explosion: "/aa/sound/expl.ogg",
   go: "/aa/sound/announcerGO.ogg",
+  count1: "/aa/sound/1voicemale.ogg",
+  count2: "/aa/sound/2voicemale.ogg",
+  count3: "/aa/sound/3voicemale.ogg",
   zone: "/aa/sound/zone_spawn.ogg",
   turn: "/aa/sound/cycle_turn.ogg",
 } as const;
@@ -16,10 +19,22 @@ type SoundKey = keyof typeof SND;
 
 type AudioBank = {
   ctx: AudioContext;
+  master: GainNode;
   engineGain: GainNode;
   engineSource: AudioBufferSourceNode | null;
   buffers: Partial<Record<SoundKey, AudioBuffer>>;
 };
+
+export type SoundChannels = {
+  /** Cycle engine hum. */
+  engine: boolean;
+  /** Turn ticks. */
+  turns: boolean;
+  /** Death explosions. */
+  explosions: boolean;
+};
+
+export const DEFAULT_SOUND_CHANNELS: SoundChannels = { engine: true, turns: true, explosions: true };
 
 type MatchAudioParams = {
   round: RoundTimeline | undefined;
@@ -27,7 +42,12 @@ type MatchAudioParams = {
   playing: boolean;
   speed: number;
   enabled: boolean;
+  /** Master volume, 0..1. */
+  volume: number;
+  channels: SoundChannels;
   zoneEnabled: boolean;
+  /** Current round-start countdown value (3..1, 0 = GO), or null when not counting. */
+  countdown: number | null;
 };
 
 /**
@@ -36,13 +56,23 @@ type MatchAudioParams = {
  * explosions on death, turns, the announcer "GO", and the zone sting — fire as the
  * playhead crosses them. Autoplay rules are satisfied because playback starts on a click.
  */
-export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnabled }: MatchAudioParams) {
+export function useMatchAudio({
+  round,
+  time,
+  playing,
+  speed,
+  enabled,
+  volume,
+  channels,
+  zoneEnabled,
+  countdown,
+}: MatchAudioParams) {
   const bankRef = useRef<AudioBank | null>(null);
   const [ready, setReady] = useState(false);
   const prevTime = useRef(time);
-  const goPlayed = useRef(false);
   const zonePlayed = useRef(false);
   const lastTurnAt = useRef(0);
+  const lastCount = useRef<number | null>(null);
 
   // Genuine deaths (before the round ends) trigger explosions; the last survivor just
   // reaches the round end.
@@ -90,11 +120,14 @@ export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnable
 
     let cancelled = false;
     const ctx = new Ctx();
+    const master = ctx.createGain();
+    master.gain.value = 0.7;
+    master.connect(ctx.destination);
     const engineGain = ctx.createGain();
     engineGain.gain.value = 0;
-    engineGain.connect(ctx.destination);
+    engineGain.connect(master);
 
-    const bank: AudioBank = { ctx, engineGain, engineSource: null, buffers: {} };
+    const bank: AudioBank = { ctx, master, engineGain, engineSource: null, buffers: {} };
     bankRef.current = bank;
 
     void (async () => {
@@ -140,16 +173,44 @@ export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnable
         // already stopped
       }
       bank.engineGain.disconnect();
+      bank.master.disconnect();
       void ctx.close();
       bankRef.current = null;
     };
   }, []);
 
+  // Master volume.
+  useEffect(() => {
+    const bank = bankRef.current;
+    if (!bank || !ready) {
+      return;
+    }
+    bank.master.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), bank.ctx.currentTime, 0.05);
+  }, [volume, ready]);
+
   // Reset the per-round one-shot guards when the round changes.
   useEffect(() => {
-    goPlayed.current = false;
     zonePlayed.current = false;
   }, [round?.id]);
+
+  // Round-start announcer: voice "3 / 2 / 1 / GO" driven by the countdown, exactly like the
+  // game (gGame.cpp PushButton(ANNOUNCER_3..GO)). Fires once per distinct countdown value.
+  useEffect(() => {
+    const bank = bankRef.current;
+    if (!bank || !ready || !enabled) {
+      return;
+    }
+    if (countdown === null) {
+      lastCount.current = null;
+      return;
+    }
+    if (lastCount.current === countdown) {
+      return;
+    }
+    lastCount.current = countdown;
+    const key: SoundKey = countdown >= 3 ? "count3" : countdown === 2 ? "count2" : countdown === 1 ? "count1" : "go";
+    playBuffer(bank, key, 0.75);
+  }, [countdown, ready, enabled]);
 
   // Engine hum: gain on while playing + unmuted, pitched roughly with playback speed.
   useEffect(() => {
@@ -157,7 +218,7 @@ export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnable
     if (!bank || !ready) {
       return;
     }
-    const on = playing && enabled;
+    const on = playing && enabled && channels.engine;
     if (on && bank.ctx.state === "suspended") {
       void bank.ctx.resume();
     }
@@ -167,7 +228,7 @@ export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnable
       0.05,
     );
     bank.engineGain.gain.setTargetAtTime(on ? 0.25 : 0, bank.ctx.currentTime, 0.08);
-  }, [playing, enabled, speed, ready]);
+  }, [playing, enabled, channels.engine, speed, ready]);
 
   // Event sounds tied to the playhead.
   useEffect(() => {
@@ -182,32 +243,31 @@ export function useMatchAudio({ round, time, playing, speed, enabled, zoneEnable
     const delta = time - prev;
     // Only react to normal forward advances; ignore scrubbing, seeking and rewinds.
     if (delta > 0 && delta < 0.6) {
-      const deaths = countInRange(deathTimes, prev, time);
-      for (let i = 0; i < deaths; i += 1) {
-        playBuffer(bank, "explosion", 0.5);
-      }
-
-      const turns = countInRange(turnTimes, prev, time);
-      if (turns > 0) {
-        const now = performance.now();
-        // Throttle so a wave of simultaneous turns doesn't flood the mix.
-        if (now - lastTurnAt.current > 45) {
-          lastTurnAt.current = now;
-          playBuffer(bank, "turn", Math.min(0.32, 0.14 + 0.05 * turns));
+      if (channels.explosions) {
+        const deaths = countInRange(deathTimes, prev, time);
+        for (let i = 0; i < deaths; i += 1) {
+          playBuffer(bank, "explosion", 0.5);
         }
       }
-    }
 
-    if (!goPlayed.current && time < 1.2) {
-      goPlayed.current = true;
-      playBuffer(bank, "go", 0.6);
+      if (channels.turns) {
+        const turns = countInRange(turnTimes, prev, time);
+        if (turns > 0) {
+          const now = performance.now();
+          // Throttle so a wave of simultaneous turns doesn't flood the mix.
+          if (now - lastTurnAt.current > 45) {
+            lastTurnAt.current = now;
+            playBuffer(bank, "turn", Math.min(0.32, 0.14 + 0.05 * turns));
+          }
+        }
+      }
     }
 
     if (zoneEnabled && !zonePlayed.current && time > 0.2) {
       zonePlayed.current = true;
       playBuffer(bank, "zone", 0.45);
     }
-  }, [time, playing, enabled, zoneEnabled, deathTimes, turnTimes, ready]);
+  }, [time, playing, enabled, zoneEnabled, channels.explosions, channels.turns, deathTimes, turnTimes, ready]);
 }
 
 function playBuffer(bank: AudioBank, key: SoundKey, volume: number) {
@@ -222,7 +282,7 @@ function playBuffer(bank: AudioBank, key: SoundKey, volume: number) {
   source.buffer = buffer;
   const gain = bank.ctx.createGain();
   gain.gain.value = volume;
-  source.connect(gain).connect(bank.ctx.destination);
+  source.connect(gain).connect(bank.master);
   source.start();
 }
 

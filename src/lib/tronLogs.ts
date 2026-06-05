@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isTstGridposLog, type TstGridposLog } from "@/types/tstLog";
@@ -54,7 +55,8 @@ export async function getMatchLogs(matchId: string): Promise<MatchLogResult> {
   const logs = parseLogs(body);
 
   await mkdir(CACHE_DIR, { recursive: true });
-  const tempPath = `${cachePath}.${process.pid}.tmp`;
+  // Unique per write so concurrent conversions don't collide on a shared pid.
+  const tempPath = `${cachePath}.${randomUUID()}.tmp`;
   await writeFile(tempPath, JSON.stringify(logs), "utf8");
   await rename(tempPath, cachePath);
 

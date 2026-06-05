@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CinematicScene, type PlaybackCameraMode } from "@/components/playback/CinematicScene";
-import { useMatchAudio } from "@/components/playback/useMatchAudio";
+import {
+  CinematicScene,
+  DEFAULT_CAMERA,
+  type CameraConfig,
+  type PlaybackCameraMode,
+} from "@/components/playback/CinematicScene";
+import { useMatchAudio, DEFAULT_SOUND_CHANNELS, type SoundChannels } from "@/components/playback/useMatchAudio";
 import {
   DEFAULT_PHYSICS,
   DEFAULT_ZONE,
@@ -11,15 +16,32 @@ import {
   type PhysicsSettings,
   type ZoneSettings,
 } from "@/lib/playback";
-import { isTstGridposLog, type TstGridposLog } from "@/types/tstLog";
+import {
+  isConquerLog,
+  isCycleDestroyLog,
+  isTstGridposLog,
+  type DecodedZone,
+  type MatchEvent,
+  type TstGridposLog,
+} from "@/types/tstLog";
 
 type PlaybackHubProps = {
   matchId: string;
+  /** Override the log source. Defaults to the tronstats logs API for `matchId`. */
+  logsUrl?: string;
 };
 
 const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2, 4];
 const AUTO_PLAYER = "__auto";
 const IDLE_HIDE_MS = 2800;
+// Points per frag. Calibrated against the official match summary: team score equals
+// kills × 30 + zone-capture points (matches the upstream scoreboard).
+const KILL_POINTS = 30;
+
+type KillEvent = { roundId: string; time: number; team: string };
+type ConquerEvent = KillEvent & { score: number };
+type ScoreEvents = { kills: KillEvent[]; conquers: ConquerEvent[] };
+type TeamScore = { score: number; kills: number; zone: number };
 
 async function readStreamWithProgress(
   body: ReadableStream<Uint8Array>,
@@ -135,8 +157,217 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function PlaybackHub({ matchId }: PlaybackHubProps) {
+type IconName =
+  | "play"
+  | "pause"
+  | "back15"
+  | "forward15"
+  | "scores"
+  | "players"
+  | "camera"
+  | "sound"
+  | "mute"
+  | "physics"
+  | "share"
+  | "fullscreen"
+  | "fullscreenExit"
+  | "chevronDown"
+  | "chevronUp"
+  | "console"
+  | "next";
+
+// Crisp single-weight line icons (Lucide-derived) so the control bar reads like a modern
+// media player instead of a row of emoji/text buttons.
+function Icon({ name }: { name: IconName }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (name) {
+    case "play":
+      return (
+        <svg {...common}>
+          <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "pause":
+      return (
+        <svg {...common}>
+          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />
+          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "back15":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+          <text x="12" y="15" fontSize="7" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">
+            15
+          </text>
+        </svg>
+      );
+    case "forward15":
+      return (
+        <svg {...common}>
+          <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <text x="12" y="15" fontSize="7" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">
+            15
+          </text>
+        </svg>
+      );
+    case "scores":
+      return (
+        <svg {...common}>
+          <line x1="6" x2="6" y1="20" y2="14" />
+          <line x1="12" x2="12" y1="20" y2="4" />
+          <line x1="18" x2="18" y1="20" y2="10" />
+        </svg>
+      );
+    case "players":
+      return (
+        <svg {...common}>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case "camera":
+      return (
+        <svg {...common}>
+          <path d="m22 8-6 4 6 4V8Z" />
+          <rect x="2" y="6" width="14" height="12" rx="2" />
+        </svg>
+      );
+    case "sound":
+      return (
+        <svg {...common}>
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+      );
+    case "mute":
+      return (
+        <svg {...common}>
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none" />
+          <line x1="22" x2="16" y1="9" y2="15" />
+          <line x1="16" x2="22" y1="9" y2="15" />
+        </svg>
+      );
+    case "physics":
+      return (
+        <svg {...common}>
+          <line x1="4" x2="4" y1="21" y2="14" />
+          <line x1="4" x2="4" y1="10" y2="3" />
+          <line x1="12" x2="12" y1="21" y2="12" />
+          <line x1="12" x2="12" y1="8" y2="3" />
+          <line x1="20" x2="20" y1="21" y2="16" />
+          <line x1="20" x2="20" y1="12" y2="3" />
+          <line x1="2" x2="6" y1="14" y2="14" />
+          <line x1="10" x2="14" y1="8" y2="8" />
+          <line x1="18" x2="22" y1="16" y2="16" />
+        </svg>
+      );
+    case "share":
+      return (
+        <svg {...common}>
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+          <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
+        </svg>
+      );
+    case "fullscreen":
+      return (
+        <svg {...common}>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+          <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+        </svg>
+      );
+    case "fullscreenExit":
+      return (
+        <svg {...common}>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+          <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+          <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+          <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+        </svg>
+      );
+    case "chevronDown":
+      return (
+        <svg {...common}>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      );
+    case "chevronUp":
+      return (
+        <svg {...common}>
+          <path d="m18 15-6-6-6 6" />
+        </svg>
+      );
+    case "next":
+      return (
+        <svg {...common}>
+          <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" stroke="none" />
+          <line x1="19" x2="19" y1="5" y2="19" />
+        </svg>
+      );
+    case "console":
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="m7 9 3 3-3 3" />
+          <line x1="13" x2="17" y1="15" y2="15" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function IconButton({
+  icon,
+  label,
+  onClick,
+  active = false,
+  variant = "ghost",
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  variant?: "ghost" | "primary";
+}) {
+  return (
+    <button
+      type="button"
+      className={`ctl-btn ctl-btn--${variant}${active ? " is-active" : ""}`}
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+    >
+      <Icon name={icon} />
+    </button>
+  );
+}
+
+export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
   const [logs, setLogs] = useState<TstGridposLog[] | null>(null);
+  const [scoreEvents, setScoreEvents] = useState<ScoreEvents | null>(null);
   const [cacheSource, setCacheSource] = useState("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
@@ -150,7 +381,13 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
   const [selectedPlayer, setSelectedPlayer] = useState(AUTO_PLAYER);
   const [cameraMode, setCameraMode] = useState<PlaybackCameraMode>("cinematic");
   const [fov, setFov] = useState(52);
-  const [autoNext, setAutoNext] = useState(false);
+  const [cameraConfig, setCameraConfig] = useState<CameraConfig>(DEFAULT_CAMERA);
+  const [autoNext, setAutoNext] = useState(true);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showScoreboard, setShowScoreboard] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const [collapsed, setCollapsed] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
@@ -158,14 +395,80 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
   const [showPhysics, setShowPhysics] = useState(false);
   const [physics, setPhysics] = useState<PhysicsSettings>(DEFAULT_PHYSICS);
   const [zone, setZone] = useState<ZoneSettings>(DEFAULT_ZONE);
+  // Zones + events recovered from a recording's network stream (aarec only).
+  const [decodedZones, setDecodedZones] = useState<DecodedZone[]>([]);
+  const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  const [showConsole, setShowConsole] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [volume, setVolume] = useState(0.7);
+  const [soundChannels, setSoundChannels] = useState<SoundChannels>(DEFAULT_SOUND_CHANNELS);
+  const [showSound, setShowSound] = useState(false);
 
   const theaterRef = useRef<HTMLDivElement>(null);
+  const debugRef = useRef<HTMLDivElement>(null);
+  const consoleRef = useRef<HTMLDivElement>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const round = timeline?.rounds[roundIndex];
   const roundDuration = round?.duration ?? 0;
+
+  const roundIdToIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    timeline?.rounds.forEach((item, index) => map.set(item.id, index));
+    return map;
+  }, [timeline]);
+
+  // Console feed: events in the current round revealed up to the playhead.
+  const currentRoundId = round?.id;
+  const consoleEntries = useMemo(() => {
+    if (!currentRoundId) return [] as MatchEvent[];
+    return matchEvents
+      .filter((event) => event.roundId === currentRoundId && event.time <= time + 0.001)
+      .sort((a, b) => a.time - b.time);
+  }, [matchEvents, currentRoundId, time]);
+
+  useEffect(() => {
+    if (showConsole && consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    }
+  }, [consoleEntries, showConsole]);
+
+  // Live match score from real kill (CycleDestroyLog) and zone-capture (ConquerLog) events.
+  // Accumulates everything in already-finished rounds plus events in the current round up to
+  // the playhead, so the board ticks up exactly as the action happens. score = kills*30 + zone.
+  const teamScores = useMemo(() => {
+    const scores = new Map<string, TeamScore>();
+    if (!scoreEvents) {
+      return scores;
+    }
+    const counted = (roundId: string, eventTime: number) => {
+      const idx = roundIdToIndex.get(roundId);
+      if (idx === undefined) {
+        return false;
+      }
+      return idx < roundIndex || (idx === roundIndex && eventTime <= time);
+    };
+    const bump = (team: string, addScore: number, addKills: number, addZone: number) => {
+      const current = scores.get(team) ?? { score: 0, kills: 0, zone: 0 };
+      scores.set(team, {
+        score: current.score + addScore,
+        kills: current.kills + addKills,
+        zone: current.zone + addZone,
+      });
+    };
+    for (const kill of scoreEvents.kills) {
+      if (counted(kill.roundId, kill.time)) {
+        bump(kill.team, KILL_POINTS, 1, 0);
+      }
+    }
+    for (const conquer of scoreEvents.conquers) {
+      if (counted(conquer.roundId, conquer.time)) {
+        bump(conquer.team, conquer.score, 0, conquer.score);
+      }
+    }
+    return scores;
+  }, [scoreEvents, roundIdToIndex, roundIndex, time]);
 
   const seek = useCallback(
     (nextTime: number) => {
@@ -174,12 +477,84 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     [roundDuration],
   );
 
+  // Deep-link: seed round + time from ?round=&t= once the timeline is ready.
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current || !timeline) {
+      return;
+    }
+    deepLinkApplied.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const roundParam = Number(params.get("round"));
+    const timeParam = Number(params.get("t"));
+    if (Number.isFinite(roundParam) && roundParam >= 1 && roundParam <= timeline.rounds.length) {
+      setRoundIndex(roundParam - 1);
+    }
+    if (Number.isFinite(timeParam) && timeParam > 0) {
+      setTime(timeParam);
+    }
+  }, [timeline]);
+
+  // 3-2-1 countdown before a round rolls (like the in-game round start). Kicks off whenever
+  // playback begins from the top of a round; the timer in the effect below resumes play at 0.
+  const beginCountdown = useCallback(() => {
+    setPlaying(false);
+    setCountdown(3);
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    if (countdown !== null) {
+      setCountdown(null);
+      return;
+    }
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    if (time <= 0.1) {
+      beginCountdown();
+    } else {
+      setPlaying(true);
+    }
+  }, [countdown, playing, time, beginCountdown]);
+
+  // Faithful to the game (gGame.cpp, PREPARE_TIME=4): one second per count, and "GO" lands
+  // exactly as the round starts playing, not after a held pause.
+  useEffect(() => {
+    if (countdown === null) {
+      return;
+    }
+    if (countdown <= 0) {
+      const id = setTimeout(() => setCountdown(null), 800);
+      return () => clearTimeout(id);
+    }
+    const id = setTimeout(() => {
+      const next = countdown - 1;
+      setCountdown(next);
+      if (next <= 0) {
+        setPlaying(true);
+      }
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [countdown]);
+
+  const copyShareLink = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set("round", String(roundIndex + 1));
+    params.set("t", time.toFixed(1));
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    void navigator.clipboard?.writeText(url).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 1600);
+    });
+  }, [roundIndex, time]);
+
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadLogs() {
       try {
-        const response = await fetch(`/api/logs/${matchId}`, {
+        const response = await fetch(logsUrl ?? `/api/logs/${matchId}`, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -213,9 +588,21 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
             })
           : await response.text();
 
-        const data: unknown = JSON.parse(text);
+        const parsed: unknown = JSON.parse(text);
 
-        if (!Array.isArray(data)) {
+        // tronstats returns a bare log array; the aarec convert API returns
+        // { logs, zones, events } with stream-recovered map zones + console events.
+        let data: unknown[];
+        if (Array.isArray(parsed)) {
+          data = parsed;
+          setDecodedZones([]);
+          setMatchEvents([]);
+        } else if (parsed && typeof parsed === "object" && Array.isArray((parsed as { logs?: unknown }).logs)) {
+          const recording = parsed as { logs: unknown[]; zones?: DecodedZone[]; events?: MatchEvent[] };
+          data = recording.logs;
+          setDecodedZones(Array.isArray(recording.zones) ? recording.zones : []);
+          setMatchEvents(Array.isArray(recording.events) ? recording.events : []);
+        } else {
           throw new Error("The log API returned an unexpected response.");
         }
 
@@ -225,7 +612,35 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
           throw new Error("No usable logs were returned for this match.");
         }
 
+        // Kill credit goes to the predator's team, so resolve usernames → team from positions.
+        const teamByUser = new Map<string, string>();
+        for (const log of valid) {
+          if (!teamByUser.has(log.Username)) {
+            teamByUser.set(log.Username, log.Team);
+          }
+        }
+
+        const kills: KillEvent[] = [];
+        const conquers: ConquerEvent[] = [];
+        for (const entry of data) {
+          if (isCycleDestroyLog(entry)) {
+            const predatorTeam = entry.Predator ? teamByUser.get(entry.Predator) : undefined;
+            // Only count genuine frags — drop suicides / same-team kills.
+            if (predatorTeam && predatorTeam !== entry.Team) {
+              kills.push({ roundId: entry.RoundId, time: entry.ElapsedTime, team: predatorTeam });
+            }
+          } else if (isConquerLog(entry)) {
+            conquers.push({
+              roundId: entry.RoundId,
+              time: entry.ElapsedTime,
+              team: entry.Team,
+              score: entry.Score,
+            });
+          }
+        }
+
         setLoadProgress(1);
+        setScoreEvents({ kills, conquers });
         setLogs(valid);
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -237,7 +652,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     void loadLogs();
 
     return () => controller.abort();
-  }, [matchId]);
+  }, [matchId, logsUrl]);
 
   useEffect(() => {
     if (!playing || !round) {
@@ -248,7 +663,9 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     let last = performance.now();
 
     const tick = (now: number) => {
-      const delta = (now - last) / 1000;
+      // Cap delta so a slow/janky frame can't fast-forward the clock and skip the action —
+      // playback eases through the hitch instead of jumping.
+      const delta = Math.min(0.1, (now - last) / 1000);
       last = now;
 
       setTime((current) => {
@@ -274,6 +691,8 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
     if (autoNext && roundIndex < timeline.rounds.length - 1) {
       setRoundIndex(roundIndex + 1);
       setTime(0);
+      setPlaying(false);
+      setCountdown(3);
     } else {
       setPlaying(false);
     }
@@ -335,7 +754,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
         case " ":
         case "k":
           event.preventDefault();
-          setPlaying((value) => !value);
+          togglePlay();
           break;
         case "ArrowLeft":
           seek(time - 5);
@@ -346,6 +765,10 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
         case "f":
           toggleFullscreen();
           break;
+        case "Tab":
+          event.preventDefault();
+          setShowScoreboard((value) => !value);
+          break;
         default:
           break;
       }
@@ -355,9 +778,19 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [time, seek, toggleFullscreen, revealControls]);
+  }, [time, seek, toggleFullscreen, revealControls, togglePlay]);
 
-  useMatchAudio({ round, time, playing, speed, enabled: soundOn, zoneEnabled: zone.enabled });
+  useMatchAudio({
+    round,
+    time,
+    playing,
+    speed,
+    enabled: soundOn,
+    volume,
+    channels: soundChannels,
+    zoneEnabled: zone.enabled,
+    countdown,
+  });
 
   if (loadError) {
     return (
@@ -429,10 +862,37 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
           selectedPlayer={selectedPlayerName}
           cameraMode={cameraMode}
           fov={fov}
+          camera={cameraConfig}
           physics={physics}
           zone={zone}
+          decodedZones={decodedZones}
+          debug={showDebug}
+          debugRef={debugRef}
         />
       </div>
+
+      {showDebug && (
+        <div className="debug-hud" ref={debugRef} aria-hidden>
+          <div className="debug-row">
+            <span>FPS</span>
+            <b>—</b>
+          </div>
+        </div>
+      )}
+
+      {countdown !== null && (
+        <div
+          className="countdown-overlay"
+          onClick={() => {
+            setCountdown(null);
+            setPlaying(true);
+          }}
+        >
+          <span key={countdown} className={`countdown-number${countdown <= 0 ? " is-go" : ""}`}>
+            {countdown > 0 ? countdown : "GO"}
+          </span>
+        </div>
+      )}
 
       <div className={`theater-topbar${barHidden ? " is-hidden" : ""}`}>
         <div className="topbar-meta">
@@ -574,6 +1034,212 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
         </aside>
       )}
 
+      {showSettings && (
+        <aside className={`theater-physics theater-settings${barHidden ? " is-hidden" : ""}`}>
+          <header>
+            <strong>Camera</strong>
+            <button type="button" className="icon-button" aria-label="Close camera settings" onClick={() => setShowSettings(false)}>
+              ✕
+            </button>
+          </header>
+          <label className="physics-field">
+            <span>Field of view · {fov}°</span>
+            <input type="range" min={30} max={110} step={1} value={fov} onChange={(event) => setFov(Number(event.target.value))} />
+          </label>
+          <label className="physics-field">
+            <span>Camera distance (BACK) · {cameraConfig.back}</span>
+            <input
+              type="range"
+              min={5}
+              max={60}
+              step={1}
+              value={cameraConfig.back}
+              onChange={(event) => setCameraConfig((current) => ({ ...current, back: Number(event.target.value) }))}
+            />
+          </label>
+          <label className="physics-field">
+            <span>Camera height (RISE) · {cameraConfig.rise}</span>
+            <input
+              type="range"
+              min={2}
+              max={45}
+              step={1}
+              value={cameraConfig.rise}
+              onChange={(event) => setCameraConfig((current) => ({ ...current, rise: Number(event.target.value) }))}
+            />
+          </label>
+          <label className="physics-field">
+            <span>Pitch · {cameraConfig.pitch.toFixed(2)}</span>
+            <input
+              type="range"
+              min={-1.5}
+              max={0.2}
+              step={0.05}
+              value={cameraConfig.pitch}
+              onChange={(event) => setCameraConfig((current) => ({ ...current, pitch: Number(event.target.value) }))}
+            />
+          </label>
+          <label className="physics-field">
+            <span>Turn speed · {cameraConfig.turnSpeed}</span>
+            <input
+              type="range"
+              min={5}
+              max={120}
+              step={1}
+              value={cameraConfig.turnSpeed}
+              onChange={(event) => setCameraConfig((current) => ({ ...current, turnSpeed: Number(event.target.value) }))}
+            />
+          </label>
+          <label className="physics-toggle">
+            <input type="checkbox" checked={showDebug} onChange={(event) => setShowDebug(event.target.checked)} />
+            <span>Show debug overlay (FPS)</span>
+          </label>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => {
+              setCameraConfig(DEFAULT_CAMERA);
+              setFov(52);
+            }}
+          >
+            Reset camera
+          </button>
+        </aside>
+      )}
+
+      {showSound && (
+        <aside className={`theater-physics theater-sound${barHidden ? " is-hidden" : ""}`}>
+          <header>
+            <strong>Sound</strong>
+            <button type="button" className="icon-button" aria-label="Close sound settings" onClick={() => setShowSound(false)}>
+              ✕
+            </button>
+          </header>
+          <label className="physics-toggle">
+            <input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />
+            <span>Sound enabled</span>
+          </label>
+          <label className="physics-field">
+            <span>Volume · {Math.round(volume * 100)}%</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
+            />
+          </label>
+          <label className="physics-toggle">
+            <input
+              type="checkbox"
+              checked={soundChannels.engine}
+              onChange={(event) => setSoundChannels((current) => ({ ...current, engine: event.target.checked }))}
+            />
+            <span>Cycle engine</span>
+          </label>
+          <label className="physics-toggle">
+            <input
+              type="checkbox"
+              checked={soundChannels.turns}
+              onChange={(event) => setSoundChannels((current) => ({ ...current, turns: event.target.checked }))}
+            />
+            <span>Turn sounds</span>
+          </label>
+          <label className="physics-toggle">
+            <input
+              type="checkbox"
+              checked={soundChannels.explosions}
+              onChange={(event) => setSoundChannels((current) => ({ ...current, explosions: event.target.checked }))}
+            />
+            <span>Explosions</span>
+          </label>
+        </aside>
+      )}
+
+      {showScoreboard && (
+        <aside className="theater-roster theater-scoreboard">
+          <header>
+            <strong>Scoreboard</strong>
+            <button type="button" className="icon-button" aria-label="Close scoreboard" onClick={() => setShowScoreboard(false)}>
+              ✕
+            </button>
+          </header>
+          <p className="scoreboard-note">Live match score · kills &amp; zone · {currentRoundLabel}</p>
+          <div className="scoreboard-teams">
+            {Array.from(
+              round.players.reduce((teams, player) => {
+                const list = teams.get(player.team) ?? [];
+                list.push(player);
+                teams.set(player.team, list);
+                return teams;
+              }, new Map<string, (typeof round.players)>()),
+            )
+              .sort(
+                (a, b) => (teamScores.get(b[0])?.score ?? 0) - (teamScores.get(a[0])?.score ?? 0),
+              )
+              .map(([team, members]) => {
+                const aliveCount = members.filter(
+                  (p) => !(p.deathTime <= time && p.deathTime < round.duration - 0.1),
+                ).length;
+                const stat = teamScores.get(team) ?? { score: 0, kills: 0, zone: 0 };
+                return (
+                  <div key={team} className="scoreboard-team">
+                    <h4 style={{ color: members[0]?.color }}>
+                      <span>{team}</span>
+                      <span className="scoreboard-score">{stat.score}</span>
+                    </h4>
+                    <p className="scoreboard-alive">
+                      {aliveCount}/{members.length} alive · {stat.kills} kills · {stat.zone} zone
+                    </p>
+                    <ul>
+                      {members.map((member) => {
+                        const dead = member.deathTime <= time && member.deathTime < round.duration - 0.1;
+                        const classes = [
+                          member.username === selectedPlayerName ? "is-selected" : "",
+                          dead ? "is-dead" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ");
+                        return (
+                          <li key={member.username} className={classes || undefined}>
+                            {member.username.split("@")[0]}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+          </div>
+        </aside>
+      )}
+
+      {showConsole && matchEvents.length > 0 && (
+        <aside className="theater-roster theater-console">
+          <header>
+            <strong>Console</strong>
+            <button type="button" className="icon-button" aria-label="Close console" onClick={() => setShowConsole(false)}>
+              ✕
+            </button>
+          </header>
+          <p className="scoreboard-note">Round events · {currentRoundLabel}</p>
+          <div className="console-feed" ref={consoleRef}>
+            {consoleEntries.length === 0 ? (
+              <p className="console-empty">No events yet this round.</p>
+            ) : (
+              consoleEntries.map((event, i) => (
+                <div key={`${event.roundId}-${i}-${event.time}`} className={`console-line console-line--${event.kind}`}>
+                  <span className="console-time">{formatTime(event.time)}</span>
+                  <span className="console-text">{event.text}</span>
+                  {event.team ? <span className="console-team">{event.team}</span> : null}
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+      )}
+
       <div className={`theater-controls${barHidden ? " is-hidden" : ""}`} onMouseMove={revealControls}>
         <div className="control-scrubber">
           <span className="time-readout">{formatTime(time)}</span>
@@ -592,24 +1258,24 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
         </div>
 
         <div className="control-bar">
-          <div className="control-group">
-            <button type="button" className="icon-button" aria-label="Back 15 seconds" onClick={() => seek(time - 15)}>
-              «15
-            </button>
-            <button
-              type="button"
-              className="icon-button play"
-              aria-label={playing ? "Pause" : "Play"}
-              onClick={() => setPlaying((value) => !value)}
-            >
-              {playing ? "❚❚" : "►"}
-            </button>
-            <button type="button" className="icon-button" aria-label="Forward 15 seconds" onClick={() => seek(time + 15)}>
-              15»
-            </button>
+          <div className="control-cluster control-cluster--transport">
+            <IconButton icon="back15" label="Back 15 seconds" onClick={() => seek(time - 15)} />
+            <IconButton
+              icon={playing ? "pause" : "play"}
+              label={playing ? "Pause" : "Play"}
+              onClick={togglePlay}
+              variant="primary"
+            />
+            <IconButton icon="forward15" label="Forward 15 seconds" onClick={() => seek(time + 15)} />
+            <IconButton
+              icon="next"
+              label={autoNext ? "Auto-advance rounds: on" : "Auto-advance rounds: off"}
+              onClick={() => setAutoNext((value) => !value)}
+              active={autoNext}
+            />
           </div>
 
-          <div className="control-group control-selects">
+          <div className="control-cluster control-cluster--selects">
             <RclSelect
               label="Round"
               value={String(roundIndex)}
@@ -621,6 +1287,7 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
                 setRoundIndex(Number(value));
                 setTime(0);
                 setPlaying(false);
+                setCountdown(null);
               }}
             />
 
@@ -652,64 +1319,67 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
               ]}
               onChange={(value) => setCameraMode(value as PlaybackCameraMode)}
             />
-
-            <label className="control-slider">
-              <span>FOV · {fov}°</span>
-              <input
-                type="range"
-                min={30}
-                max={110}
-                step={1}
-                value={fov}
-                onChange={(event) => setFov(Number(event.target.value))}
-              />
-            </label>
-
-            <label className="control-check">
-              <input type="checkbox" checked={autoNext} onChange={(event) => setAutoNext(event.target.checked)} />
-              <span>Auto next round</span>
-            </label>
           </div>
 
-          <div className="control-group control-actions">
-            <button
-              type="button"
-              className={showRoster ? "icon-button active" : "icon-button"}
-              aria-label="Toggle players"
+          <div className="control-cluster control-cluster--panels">
+            <IconButton
+              icon="scores"
+              label="Scoreboard (Tab)"
+              onClick={() => setShowScoreboard((value) => !value)}
+              active={showScoreboard}
+            />
+            <IconButton
+              icon="players"
+              label="Players"
               onClick={() => setShowRoster((value) => !value)}
-            >
-              Players
-            </button>
-            <button
-              type="button"
-              className={showPhysics ? "icon-button active" : "icon-button"}
-              aria-label="Toggle physics"
+              active={showRoster}
+            />
+            <IconButton
+              icon="camera"
+              label="Camera settings"
+              onClick={() => setShowSettings((value) => !value)}
+              active={showSettings}
+            />
+            <IconButton
+              icon={soundOn && volume > 0 ? "sound" : "mute"}
+              label="Sound settings"
+              onClick={() => setShowSound((value) => !value)}
+              active={showSound}
+            />
+            <IconButton
+              icon="physics"
+              label="Physics & zone"
               onClick={() => setShowPhysics((value) => !value)}
-            >
-              Physics
-            </button>
-            <button
-              type="button"
-              className={soundOn ? "icon-button active" : "icon-button"}
-              aria-label={soundOn ? "Mute" : "Unmute"}
-              onClick={() => setSoundOn((value) => !value)}
-            >
-              {soundOn ? "🔊" : "🔇"}
-            </button>
-            <button type="button" className="icon-button" aria-label="Fullscreen" onClick={toggleFullscreen}>
-              {isFullscreen ? "⤢" : "⛶"}
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Minimise controls"
+              active={showPhysics}
+            />
+            {matchEvents.length > 0 && (
+              <IconButton
+                icon="console"
+                label="Event console"
+                onClick={() => setShowConsole((value) => !value)}
+                active={showConsole}
+              />
+            )}
+            <span className="control-divider" aria-hidden />
+            <IconButton
+              icon="share"
+              label={shareCopied ? "Link copied" : "Copy shareable link"}
+              onClick={copyShareLink}
+              active={shareCopied}
+            />
+            <IconButton
+              icon={isFullscreen ? "fullscreenExit" : "fullscreen"}
+              label="Fullscreen"
+              onClick={toggleFullscreen}
+            />
+            <IconButton
+              icon="chevronDown"
+              label="Minimise controls"
               onClick={() => {
                 setCollapsed(true);
                 setControlsHidden(true);
               }}
-            >
-              ▾
-            </button>
+            />
           </div>
         </div>
       </div>
@@ -724,7 +1394,8 @@ export function PlaybackHub({ matchId }: PlaybackHubProps) {
             setControlsHidden(false);
           }}
         >
-          ▴ Controls
+          <Icon name="chevronUp" />
+          <span>Controls</span>
         </button>
       )}
     </main>

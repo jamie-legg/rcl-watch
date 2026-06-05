@@ -2,12 +2,13 @@
 
 import { ContactShadows, Environment, Html, PerspectiveCamera, useTexture } from "@react-three/drei";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 import { OBJLoader } from "three-stdlib";
 import {
   DEFAULT_PHYSICS,
   DEFAULT_ZONE,
+  EXPLOSION_DURATION,
   getRoundSnapshot,
   zoneRadiusAt,
   type ExplosionState,
@@ -18,8 +19,24 @@ import {
   type TrailSegment,
   type ZoneSettings,
 } from "@/lib/playback";
+import type { DecodedZone } from "@/types/tstLog";
 
 export type PlaybackCameraMode = "cinematic" | "follow" | "pov" | "noclip";
+
+// Follow-camera rig mapped 1:1 to Armagetron's custom-camera settings (eCamera.cpp):
+//   CAMERA_CUSTOM_BACK / RISE / PITCH / TURN_SPEED. Defaults are the game's defaults.
+export type CameraConfig = {
+  /** CAMERA_CUSTOM_BACK: distance the camera sits behind the cycle (game units). */
+  back: number;
+  /** CAMERA_CUSTOM_RISE: height the camera sits above the cycle (game units). */
+  rise: number;
+  /** CAMERA_CUSTOM_PITCH: vertical look slope (negative looks down). */
+  pitch: number;
+  /** CAMERA_CUSTOM_TURN_SPEED: how fast the camera direction eases toward the cycle heading. */
+  turnSpeed: number;
+};
+
+export const DEFAULT_CAMERA: CameraConfig = { back: 30, rise: 20, pitch: -0.7, turnSpeed: 40 };
 
 // Original Armagetron Advanced art, imported from the game's `textures/` dir.
 const TEX = {
@@ -44,8 +61,13 @@ type CinematicSceneProps = {
   selectedPlayer?: string;
   cameraMode: PlaybackCameraMode;
   fov?: number;
+  camera?: CameraConfig;
   physics?: PhysicsSettings;
   zone?: ZoneSettings;
+  /** Zones recovered from a recording (aarec); take priority over the heuristic sumo zone. */
+  decodedZones?: DecodedZone[];
+  debug?: boolean;
+  debugRef?: RefObject<HTMLDivElement | null>;
 };
 
 export function CinematicScene({
@@ -54,17 +76,42 @@ export function CinematicScene({
   selectedPlayer,
   cameraMode,
   fov = 52,
+  camera = DEFAULT_CAMERA,
   physics = DEFAULT_PHYSICS,
   zone = DEFAULT_ZONE,
+  decodedZones = [],
+  debug = false,
+  debugRef,
 }: CinematicSceneProps) {
   const snapshot = useMemo(() => getRoundSnapshot(round, time, physics), [round, time, physics]);
   const leans = useMemo(() => computeLeans(snapshot, round.bounds), [snapshot, round.bounds]);
-  const zoneRadius = zoneRadiusAt(time, zone);
+  const hasDecodedZones = decodedZones.length > 0;
+  // Decoded (recording) zones take priority over the heuristic sumo zone.
+  const zoneRadius = hasDecodedZones ? null : zoneRadiusAt(time, zone);
   const zoneCenter = toWorld(zone.centerX, zone.centerY, round);
   const arenaSize = Math.max(round.bounds.width, round.bounds.height);
+  // Cinematic camera should orbit the actual action centre, not the world origin
+  // (which is the player-position bounding-box centre, usually off the map centre).
+  // With decoded zones, orbit their centroid; with the sumo zone, its centre.
+  const decodedCentroid = useMemo<[number, number, number] | null>(() => {
+    if (!hasDecodedZones) return null;
+    let sx = 0;
+    let sz = 0;
+    for (const z of decodedZones) {
+      const w = toWorld(z.centerX, z.centerY, round);
+      sx += w.x;
+      sz += w.z;
+    }
+    return [sx / decodedZones.length, 0, sz / decodedZones.length];
+  }, [hasDecodedZones, decodedZones, round]);
+  const orbitCenter = useMemo<[number, number, number]>(
+    () => decodedCentroid ?? (zone.enabled ? [zoneCenter.x, 0, zoneCenter.z] : [0, 0, 0]),
+    [decodedCentroid, zone.enabled, zoneCenter.x, zoneCenter.z],
+  );
 
   return (
     <Canvas shadows={{ type: THREE.PCFShadowMap }} dpr={[1, 2]} gl={{ antialias: true }}>
+      {debug && debugRef && <DebugStats targetRef={debugRef} />}
       <color attach="background" args={["#0a1626"]} />
       <fog attach="fog" args={["#0a1626", arenaSize * 0.9, arenaSize * 2.4]} />
       <PerspectiveCamera makeDefault fov={fov} position={[0, arenaSize * 0.6, arenaSize * 0.9]} />
@@ -77,6 +124,8 @@ export function CinematicScene({
           selectedPlayer={selectedPlayer}
           mode={cameraMode}
           players={snapshot.players}
+          config={camera}
+          orbitCenter={orbitCenter}
         />
       )}
 
@@ -98,6 +147,7 @@ export function CinematicScene({
         <RimWalls round={round} />
         <TrailSegments segments={snapshot.trails} round={round} />
       </Suspense>
+      {hasDecodedZones && <DecodedZones zones={decodedZones} time={time} round={round} />}
       {zoneRadius !== null && zoneRadius > 0.5 && (
         <SumoZone radius={zoneRadius} time={time} center={[zoneCenter.x, zoneCenter.z]} />
       )}
@@ -112,6 +162,11 @@ export function CinematicScene({
           />
         ))}
       </Suspense>
+      {snapshot.players
+        .filter((player) => player.active)
+        .map((player) => (
+          <CycleLabel key={player.username} player={player} round={round} selected={player.username === selectedPlayer} />
+        ))}
       {snapshot.explosions.map((explosion) => (
         <Explosion key={explosion.username} data={explosion} round={round} />
       ))}
@@ -253,13 +308,17 @@ type CameraRigProps = {
   selectedPlayer?: string;
   mode: PlaybackCameraMode;
   players: PlayerState[];
+  config: CameraConfig;
+  orbitCenter: [number, number, number];
 };
 
-function CameraRig({ round, time, selectedPlayer, mode, players }: CameraRigProps) {
+function CameraRig({ round, time, selectedPlayer, mode, players, config, orbitCenter }: CameraRigProps) {
   const { camera } = useThree();
   const lookAt = useRef(new THREE.Vector3());
   const desiredPosition = useRef(new THREE.Vector3());
   const desiredLookAt = useRef(new THREE.Vector3());
+  // Persistent camera heading that eases toward the cycle direction (AA's `newdir`).
+  const camDir = useRef(new THREE.Vector3(0, 0, -1));
   const arenaSize = Math.max(round.bounds.width, round.bounds.height);
 
   useFrame((_, delta) => {
@@ -267,32 +326,54 @@ function CameraRig({ round, time, selectedPlayer, mode, players }: CameraRigProp
 
     if (mode === "cinematic" || !target) {
       const orbit = time * 0.11;
-      desiredLookAt.current.set(0, 0.9, 0);
+      desiredLookAt.current.set(orbitCenter[0], 0.9, orbitCenter[2]);
       desiredPosition.current.set(
-        Math.cos(orbit) * arenaSize * 0.55,
+        orbitCenter[0] + Math.cos(orbit) * arenaSize * 0.55,
         arenaSize * 0.38 + Math.sin(time * 0.17) * 7,
-        Math.sin(orbit) * arenaSize * 0.55,
+        orbitCenter[2] + Math.sin(orbit) * arenaSize * 0.55,
       );
-    } else {
-      const targetPosition = toWorld(target.x, target.y, round);
-      const heading = new THREE.Vector3(target.dirX, 0, -target.dirY).normalize();
-      const side = new THREE.Vector3(-heading.z, 0, heading.x);
-
-      if (mode === "pov") {
-        desiredPosition.current.copy(targetPosition).addScaledVector(heading, -2.8).add(new THREE.Vector3(0, 1.45, 0));
-        desiredLookAt.current.copy(targetPosition).addScaledVector(heading, 13).add(new THREE.Vector3(0, 1.2, 0));
-      } else {
-        desiredPosition.current
-          .copy(targetPosition)
-          .addScaledVector(heading, -18)
-          .addScaledVector(side, 5)
-          .add(new THREE.Vector3(0, 12, 0));
-        desiredLookAt.current.copy(targetPosition).addScaledVector(heading, 8).add(new THREE.Vector3(0, 2.2, 0));
-      }
+      const alpha = 1 - Math.exp(-delta * 3.6);
+      camera.position.lerp(desiredPosition.current, alpha);
+      lookAt.current.lerp(desiredLookAt.current, alpha);
+      camera.lookAt(lookAt.current);
+      return;
     }
 
-    const responsiveness = mode === "pov" ? 8 : mode === "follow" ? 1.9 : 3.6;
-    const alpha = 1 - Math.exp(-delta * responsiveness);
+    const targetPosition = toWorld(target.x, target.y, round);
+    const heading = new THREE.Vector3(target.dirX, 0, -target.dirY).normalize();
+
+    if (mode === "pov") {
+      desiredPosition.current.copy(targetPosition).addScaledVector(heading, -2.8).add(new THREE.Vector3(0, 1.45, 0));
+      desiredLookAt.current.copy(targetPosition).addScaledVector(heading, 13).add(new THREE.Vector3(0, 1.2, 0));
+      const alpha = 1 - Math.exp(-delta * 8);
+      camera.position.lerp(desiredPosition.current, alpha);
+      lookAt.current.lerp(desiredLookAt.current, alpha);
+      camera.lookAt(lookAt.current);
+      return;
+    }
+
+    // Follow = AA custom camera. Ease the camera heading toward the cycle's at TURN_SPEED
+    // (newdir = dir + cycleDir·turnSpeed·dt, renormalised), then place BACK behind / RISE
+    // above and look down by PITCH.
+    const dir = camDir.current;
+    dir.addScaledVector(heading, config.turnSpeed * delta);
+    dir.y = 0;
+    if (dir.lengthSq() < 1e-6) {
+      dir.copy(heading);
+    }
+    dir.normalize();
+
+    desiredPosition.current
+      .copy(targetPosition)
+      .addScaledVector(dir, -config.back)
+      .add(new THREE.Vector3(0, config.rise, 0));
+    // View direction: camera heading (horizontal) tilted by the pitch slope.
+    desiredLookAt.current
+      .copy(desiredPosition.current)
+      .add(new THREE.Vector3(dir.x, config.pitch, dir.z).multiplyScalar(10));
+
+    // Position is eased only lightly (anti-jitter); the turn feel comes from camDir easing.
+    const alpha = 1 - Math.exp(-delta * 10);
     camera.position.lerp(desiredPosition.current, alpha);
     lookAt.current.lerp(desiredLookAt.current, alpha);
     camera.lookAt(lookAt.current);
@@ -453,7 +534,7 @@ function RimWall({
 // Combined with the per-instance player colour (instanceColor), this gives each side of a
 // wall a distinct shade so neighbouring walls stay readable in tight gaps.
 function makeTrailGeometry(): THREE.BoxGeometry {
-  const box = new THREE.BoxGeometry(1, 1.4, 0.14);
+  const box = new THREE.BoxGeometry(1, 1.4, 0.06);
   // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z (4 vertices each).
   const faceTint = [0.82, 0.82, 1.3, 0.45, 1.12, 0.66];
   const tint: number[] = [];
@@ -509,9 +590,10 @@ function TrailSegments({ segments, round }: { segments: TrailSegment[]; round: R
           segments={byPlayer.get(player.username) ?? EMPTY_SEGMENTS}
           round={round}
           capacity={Math.max(1, player.trails.length)}
-          // Distinct, evenly-spread depth bias per player. Centred around 0 so nobody is
-          // pushed too far; the gap (2 units) is plenty to win the depth tie cleanly.
-          depthBias={(index - (round.players.length - 1) / 2) * 2}
+          // Distinct, evenly-spread depth rank per player, centred on 0. Used as BOTH the
+          // polygon-offset factor (slope-scaled) and units below, so coplanar walls separate
+          // cleanly even at the glancing angles where a constant offset wasn't enough.
+          depthBias={index - (round.players.length - 1) / 2}
         />
       ))}
     </>
@@ -519,6 +601,9 @@ function TrailSegments({ segments, round }: { segments: TrailSegment[]; round: R
 }
 
 const EMPTY_SEGMENTS: TrailSegment[] = [];
+
+// Trail walls read ~35% too tall in our scene; scale them down.
+const WALL_HEIGHT_FACTOR = 0.65;
 
 function PlayerTrailMesh({
   geometry,
@@ -553,7 +638,7 @@ function PlayerTrailMesh({
       const transform = getTrailTransform(segment, round);
       // intensity < 1 means a dead player's wall is expiring: sink and dim it.
       const intensity = THREE.MathUtils.clamp(segment.intensity, 0, 1);
-      const height = 0.25 + 0.75 * intensity;
+      const height = (0.25 + 0.75 * intensity) * WALL_HEIGHT_FACTOR;
       dummy.position.set(transform.position[0], transform.position[1] * height, transform.position[2]);
       dummy.rotation.set(0, transform.rotationY, 0);
       dummy.scale.set(transform.length, height, 1);
@@ -574,14 +659,16 @@ function PlayerTrailMesh({
     <instancedMesh ref={meshRef} args={[geometry, undefined, capacity]}>
       {/* vertexColors (per-face brightness) × instanceColor (player hue) = tinted sides.
           Opaque on purpose: transparent walls flicker/sort badly where they overlap.
-          polygonOffset gives each player a distinct depth so coplanar walls don't fight. */}
+          polygonOffset gives each player a distinct depth so coplanar walls don't fight.
+          A *slope-scaled* factor (not just constant units) is required — these near-edge-on
+          walls have a steep depth gradient, so a constant offset alone still z-fights. */}
       <meshBasicMaterial
         map={texture}
         vertexColors
         toneMapped={false}
         polygonOffset
-        polygonOffsetFactor={0}
-        polygonOffsetUnits={depthBias}
+        polygonOffsetFactor={depthBias}
+        polygonOffsetUnits={depthBias * 4}
       />
     </instancedMesh>
   );
@@ -598,9 +685,8 @@ function getTrailTransform(segment: TrailSegment, round: RoundTimeline) {
   return { length, position, rotationY };
 }
 
-// Overall scale for the imported cycle models. 0.95 read too big and a literal 0.5 (the
-// game's glScalef) too small against our wall sizing, so split the difference.
-const CYCLE_SCALE = 0.72;
+// Overall scale for the imported cycle models. Matches the game's glScalef(.5,.5,.5).
+const CYCLE_SCALE = 0.5;
 
 // AA cycle textures are greyscale + alpha: the alpha marks the painted detail and the
 // transparent areas get filled with the player colour (see gTextureCycle::ProcessImage in
@@ -734,8 +820,14 @@ function sensorHit(
   walls: Array<[number, number, number, number]>,
 ): number {
   let best = SKEW_EXTENSION;
+  const ext = SKEW_EXTENSION;
   for (const [ax, ay, bx, by] of walls) {
-    const d = rayHitDistance(px, py, dx, dy, ax, ay, bx, by, SKEW_EXTENSION);
+    // Cheap AABB reject: the ray only reaches `ext`, so skip far segments outright.
+    if (ax < px - ext && bx < px - ext) continue;
+    if (ax > px + ext && bx > px + ext) continue;
+    if (ay < py - ext && by < py - ext) continue;
+    if (ay > py + ext && by > py + ext) continue;
+    const d = rayHitDistance(px, py, dx, dy, ax, ay, bx, by, ext);
     if (d < best) best = d;
   }
   return best;
@@ -780,6 +872,28 @@ function computeLeans(snapshot: RoundSnapshot, bounds: RoundTimeline["bounds"]):
   return leans;
 }
 
+// Name plate that eases toward its cycle instead of snapping, so it's readable at speed.
+function CycleLabel({ player, round, selected }: { player: PlayerState; round: RoundTimeline; selected: boolean }) {
+  // Lock the label to the cycle's interpolated position (driven by the same render as the
+  // bike). An earlier soft-follow lerp ran in its own useFrame loop, a second rAF clock that
+  // beat against the playback clock and made the names shake — direct positioning is rock steady.
+  const target = toWorld(player.x, player.y, round);
+
+  const name = player.username.split("@")[0];
+  const suffix = player.username.includes("@") ? player.username.split("@").slice(1).join("@") : "";
+
+  return (
+    <group position={[target.x, 2.6, target.z]}>
+      <Html center distanceFactor={30} zIndexRange={[24, 0]} wrapperClass="cycle-label-wrap" occlude={false}>
+        <span className={`cycle-label${selected ? " is-selected" : ""}`} style={{ ["--cycle" as string]: player.color }}>
+          <strong>{name}</strong>
+          {suffix && <em>@{suffix}</em>}
+        </span>
+      </Html>
+    </group>
+  );
+}
+
 function CycleMarker({ player, round, selected, lean }: { player: PlayerState; round: RoundTimeline; selected: boolean; lean: number }) {
   const position = toWorld(player.x, player.y, round);
 
@@ -789,20 +903,6 @@ function CycleMarker({ player, round, selected, lean }: { player: PlayerState; r
       <group rotation={[lean, 0, 0]}>
         <CycleModel color={player.color} selected={selected} distance={player.distance} />
       </group>
-      {player.active && (
-        <Html
-          position={[0, 2.6, 0]}
-          center
-          distanceFactor={26}
-          zIndexRange={[24, 0]}
-          wrapperClass="cycle-label-wrap"
-          occlude={false}
-        >
-          <span className={`cycle-label${selected ? " is-selected" : ""}`} style={{ ["--cycle" as string]: player.color }}>
-            {player.username}
-          </span>
-        </Html>
-      )}
       {!player.active && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[2.8, 2.8, 1]} position={[0.5, 0.02, 0]}>
           <circleGeometry args={[1, 36]} />
@@ -902,55 +1002,149 @@ function CycleModel({ color, selected, distance }: { color: string; selected: bo
 
 const ZONE_COLOR = "#c6f534";
 
-// Shrinking sumo / fortress win-zone, centred on the arena (world origin). Unit-radius
-// geometry scaled by the current radius so we never reallocate buffers per frame.
-function SumoZone({ radius, time, center }: { radius: number; time: number; center: [number, number] }) {
+// Faithful to gWinZone.cpp Render: the win-zone is a ring of ZONE_SEGMENTS (11) vertical
+// quads, each spanning ZONE_SEG_LENGTH (0.5) of its arc slot (so they're dashed with gaps),
+// the whole ring rotating at ROTATION_SPEED (~0.3 rad/s). ZONE_HEIGHT is 5 in-game; we trim
+// it a touch to fit our compressed scene. Built once at unit radius/height and scaled.
+const ZONE_SEGMENTS = 11;
+const ZONE_SEG_LENGTH = 0.5;
+const ZONE_HEIGHT = 4;
+const ZONE_ROTATION_SPEED = 0.3;
+
+function buildZoneGeometry(): THREE.BufferGeometry {
+  const seglen = ((2 * Math.PI) / ZONE_SEGMENTS) * ZONE_SEG_LENGTH;
+  const positions: number[] = [];
+  for (let i = 0; i < ZONE_SEGMENTS; i += 1) {
+    const a = (i * 2 * Math.PI) / ZONE_SEGMENTS;
+    const b = a + seglen;
+    const sa = Math.sin(a);
+    const ca = Math.cos(a);
+    const sb = Math.sin(b);
+    const cb = Math.cos(b);
+    // Two triangles for the quad (sa,ca)→(sb,cb), y from 0 (ground) to 1 (top).
+    positions.push(sa, 0, ca, sa, 1, ca, sb, 1, cb);
+    positions.push(sa, 0, ca, sb, 1, cb, sb, 0, cb);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+function SumoZone({
+  radius,
+  time,
+  center,
+  color = ZONE_COLOR,
+  rotationSpeed = ZONE_ROTATION_SPEED,
+}: {
+  radius: number;
+  time: number;
+  center: [number, number];
+  color?: string;
+  rotationSpeed?: number;
+}) {
+  const geometry = useMemo(buildZoneGeometry, []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const pulse = 0.5 + 0.5 * Math.sin(time * 2.4);
+
   return (
-    <group position={[center[0], 0, center[1]]} scale={[radius, 1, radius]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
-        <circleGeometry args={[1, 72]} />
-        <meshBasicMaterial color={ZONE_COLOR} transparent opacity={0.05} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
+    <group position={[center[0], 0, center[1]]}>
+      {/* Faint ground ring so the footprint reads even when the wall is far. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} scale={[radius, radius, 1]}>
+        <ringGeometry args={[0.985, 1, 96]} />
+        <meshBasicMaterial color={color} transparent opacity={0.35} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.09, 0]}>
-        <ringGeometry args={[0.97, 1, 96]} />
-        <meshBasicMaterial color={ZONE_COLOR} transparent opacity={0.5 + 0.4 * pulse} side={THREE.DoubleSide} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 1.6, 0]}>
-        <cylinderGeometry args={[1, 1, 3.2, 96, 1, true]} />
-        <meshBasicMaterial color={ZONE_COLOR} transparent opacity={0.1 + 0.06 * pulse} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
+      {/* Rotating segmented wall (additive glow). */}
+      <mesh geometry={geometry} scale={[radius, ZONE_HEIGHT, radius]} rotation={[0, time * rotationSpeed, 0]}>
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.32 + 0.2 * pulse}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
 }
 
-// Hemisphere-up unit directions for explosion sparks, mirroring gExplosion's expvec burst.
+// Render zones recovered from the recording's network stream (gZone, descriptor
+// 340). radius(t) = offset + slope*(t - referenceTime): fortress zones are fixed
+// (slope 0), the sumo/win zone shrinks (slope < 0). Colour is the team colour.
+function DecodedZones({ zones, time, round }: { zones: DecodedZone[]; time: number; round: RoundTimeline }) {
+  return (
+    <>
+      {zones.map((zone, i) => {
+        const radius = Math.max(0, zone.radiusOffset + zone.radiusSlope * (time - zone.referenceTime));
+        if (radius <= 0.5) return null;
+        const c = toWorld(zone.centerX, zone.centerY, round);
+        const [r, g, b] = zone.color;
+        // Black means a not-yet-team-coloured creation; fall back to the ring colour.
+        const color = r + g + b < 0.05 ? ZONE_COLOR : `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+        return (
+          <SumoZone
+            key={`${zone.centerX},${zone.centerY},${i}`}
+            radius={radius}
+            time={time}
+            center={[c.x, c.z]}
+            color={color}
+            rotationSpeed={zone.rotationSpeed || ZONE_ROTATION_SPEED}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+// Faithful copy of gExplosion's `expvec`: 9 fixed cardinal/diagonal rays plus 31 random ones
+// with a wide horizontal spread (fak=7) and a fixed upward (z=1) bias, all normalised. The
+// game is z-up; our scene is y-up, so we remap (gx, gy_horiz, gz_up) → (gx, gz_up, gy_horiz).
 const EXPLOSION_DIRS: Array<[number, number, number]> = (() => {
   const seeded = (n: number) => {
     const value = Math.sin(n * 12.9898) * 43758.5453;
     return value - Math.floor(value);
   };
-  const dirs: Array<[number, number, number]> = [];
-  for (let i = 0; i < 44; i += 1) {
-    const x = seeded(i + 1) - 0.5;
-    const z = seeded(i + 101) - 0.5;
-    const y = 0.18 + seeded(i + 201) * 0.9;
-    const length = Math.hypot(x, y, z) || 1;
-    dirs.push([x / length, y / length, z / length]);
+  const raw: Array<[number, number, number]> = [
+    [0, 0, 1],
+    [0, 1, 1],
+    [0, -1, 1],
+    [1, 0, 1],
+    [-1, 0, 1],
+    [1, 1, 1],
+    [-1, 1, 1],
+    [1, -1, 1],
+    [-1, -1, 1],
+  ];
+  const fak = 7;
+  for (let j = raw.length; j < 40; j += 1) {
+    raw.push([fak * (seeded(j + 1) - 0.5), fak * (seeded(j + 201) - 0.5), 1]);
   }
-  return dirs;
+  return raw.map(([gx, gy, gz]) => {
+    const x = gx;
+    const y = gz; // game up (z) → scene up (y)
+    const z = gy;
+    const length = Math.hypot(x, y, z) || 1;
+    return [x / length, y / length, z / length] as [number, number, number];
+  });
 })();
 
-function Explosion({ data, round }: { data: ExplosionState; round: RoundTimeline }) {
-  const arenaSize = Math.max(round.bounds.width, round.bounds.height);
-  const maxRadius = THREE.MathUtils.clamp(arenaSize * 0.14, 6, 16);
-  const position = toWorld(data.x, data.y, round);
-  const t = data.progress;
+// gExplosion::Render scales the ray endpoints by a1*100 (game units/sec); ours is 1:1 with the
+// game's coordinates, so we use the same rate.
+const EXPLOSION_SPEED = 100;
 
-  // Expanding shell: outer edge races ahead, inner edge follows, then it fades out.
-  const outer = maxRadius * Math.sqrt(t);
-  const inner = maxRadius * Math.max(0, 1.6 * t - 0.6);
-  const opacity = t < 0.45 ? 1 : Math.max(0, 1 - (t - 0.45) / 0.55);
+function Explosion({ data, round }: { data: ExplosionState; round: RoundTimeline }) {
+  const position = toWorld(data.x, data.y, round);
+
+  // Mirror gExplosion::Render exactly. age (a1) runs 0..EXPLOSION_DURATION seconds. Each ray
+  // goes from inner radius (e) to outer (a1), both ×100. Full opacity for the first second,
+  // then a linear fade to 0 by ~2s; after 1s the inner ends lift off into an expanding shell.
+  const a1 = data.progress * EXPLOSION_DURATION + 0.01;
+  const e = Math.max(0, a1 - 1);
+  const fade = THREE.MathUtils.clamp(2 - a1, 0, 1);
+  const outer = a1 * EXPLOSION_SPEED;
+  const inner = e * EXPLOSION_SPEED;
 
   const geometry = useMemo(() => {
     const buffer = new THREE.BufferGeometry();
@@ -975,13 +1169,61 @@ function Explosion({ data, round }: { data: ExplosionState; round: RoundTimeline
   }, [geometry, inner, outer]);
 
   return (
-    <group position={[position.x, 0.8, position.z]}>
-      <pointLight color={data.color} intensity={(1 - t) * 60} distance={maxRadius * 2.6} />
+    <group position={[position.x, 0.35, position.z]}>
+      <pointLight color={data.color} intensity={fade * 90} distance={Math.max(24, outer * 1.4)} />
       <lineSegments geometry={geometry}>
-        <lineBasicMaterial color={data.color} transparent opacity={opacity} toneMapped={false} />
+        <lineBasicMaterial color={data.color} transparent opacity={fade} toneMapped={false} />
       </lineSegments>
     </group>
   );
+}
+
+// Samples render stats inside the Canvas and writes them straight into a DOM node owned by
+// PlaybackHub (via ref) ~4×/sec, so the HUD never triggers a React re-render of the scene.
+function DebugStats({ targetRef }: { targetRef: RefObject<HTMLDivElement | null> }) {
+  const gl = useThree((state) => state.gl);
+  const acc = useRef({ frames: 0, elapsed: 0, last: performance.now(), low: Infinity });
+
+  useFrame(() => {
+    const now = performance.now();
+    const a = acc.current;
+    a.elapsed += now - a.last;
+    a.last = now;
+    a.frames += 1;
+
+    if (a.elapsed < 250) {
+      return;
+    }
+
+    const fps = (a.frames * 1000) / a.elapsed;
+    const ms = a.elapsed / a.frames;
+    a.low = Math.min(a.low, fps);
+
+    const el = targetRef.current;
+    if (el) {
+      const render = gl.info.render;
+      const memory = gl.info.memory;
+      const programs = gl.info.programs?.length ?? 0;
+      const rows: Array<[string, string]> = [
+        ["FPS", fps.toFixed(0)],
+        ["Low", Number.isFinite(a.low) ? a.low.toFixed(0) : "—"],
+        ["Frame", `${ms.toFixed(1)} ms`],
+        ["Draw calls", render.calls.toLocaleString()],
+        ["Triangles", render.triangles.toLocaleString()],
+        ["Geometries", String(memory.geometries)],
+        ["Textures", String(memory.textures)],
+        ["Programs", String(programs)],
+      ];
+      el.innerHTML = rows
+        .map(([k, v]) => `<div class="debug-row"><span>${k}</span><b>${v}</b></div>`)
+        .join("");
+    }
+
+    a.frames = 0;
+    a.elapsed = 0;
+  });
+
+  return null;
 }
 
 function chooseCameraTarget(players: PlayerState[], selectedPlayer?: string): PlayerState | undefined {
