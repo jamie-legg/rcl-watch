@@ -509,7 +509,36 @@ select {
 }
 
 .reaction-bar--theater {
-  gap: 10px;
+  gap: 6px;
+}
+
+/* Flat toolbar styling inside the topbar cluster (the cluster has the border). */
+.reaction-bar--theater .rxn-btn {
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 7px;
+}
+
+.reaction-bar--theater .rxn-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+}
+
+.reaction-bar--theater .rxn-fav.active,
+.reaction-bar--theater .rxn-up.active,
+.reaction-bar--theater .rxn-down.active {
+  background: transparent;
+  border-color: transparent;
+}
+
+.reaction-bar--theater .rxn-vote {
+  padding: 0 2px;
+  border-left: 1px solid var(--line);
+  margin-left: 2px;
+}
+
+.topbar-actions .auth-button {
+  padding: 5px 12px;
 }
 
 /* ---- match history meta ---- */
@@ -720,14 +749,49 @@ select {
 
 .topbar-stats {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* Interactive cluster (reactions + auth) — must opt back into pointer events
+   because .theater-topbar disables them so the canvas stays draggable. */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 11, 20, 0.72);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.topbar-actions .auth-bar {
+  min-height: 0;
+}
+
+.topbar-actions .reaction-bar + .auth-bar {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.topbar-tech {
+  display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px 18px;
+  align-items: center;
+  gap: 6px 12px;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.34);
   text-align: right;
+}
+
+.topbar-tech-id {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .noclip-hint {

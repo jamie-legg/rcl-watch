@@ -927,14 +927,18 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
           <strong>{currentRoundLabel}</strong>
         </div>
         <div className="topbar-stats">
-          {reactionKind && reactionId && (
-            <ReactionBar kind={reactionKind} id={reactionId} variant="theater" stopPropagation={false} />
-          )}
-          <AuthBar compact />
-          {cameraMode === "noclip" && <span className="noclip-hint">WASD move · E/Q up·down · drag to look · shift = sprint</span>}
-          <span>{matchId}</span>
-          <span>cache: {cacheSource}</span>
-          <span>{timeline.totalLogs.toLocaleString()} logs</span>
+          <div className="topbar-actions">
+            {reactionKind && reactionId && (
+              <ReactionBar kind={reactionKind} id={reactionId} variant="theater" stopPropagation={false} />
+            )}
+            <AuthBar compact />
+          </div>
+          <div className="topbar-tech">
+            {cameraMode === "noclip" && <span className="noclip-hint">WASD · E/Q up·down · drag look · shift sprint</span>}
+            <span className="topbar-tech-id">{matchId}</span>
+            <span>{cacheSource}</span>
+            <span>{timeline.totalLogs.toLocaleString()} logs</span>
+          </div>
         </div>
       </div>
 

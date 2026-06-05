@@ -2,6 +2,8 @@
 
 ## 2026-06-06
 
+- **Theater topbar cleanup.** The reaction + auth controls were crammed inline with the mono debug stats and weren't reliably clickable (`.theater-topbar` is `pointer-events: none`). Split into a right-aligned glass **actions pill** (favourite · up/down · divider · user/sign-out, `pointer-events: auto`) above a small dimmed **tech row** (matchId · cache · logs). Reaction buttons render flat inside the pill instead of pills-within-a-pill.
+
 - **Match history epic (B): authoritative "My matches" at `/me`, deep-linked to playback.** Built entirely inside Watch using its `rcl_db` access + shared Supabase session. `src/lib/history.ts` resolves the viewer the same way as the dashboard's `/api/profile/stats` (Supabase profile `username`/`ingame_email` + `linked_logins`), then queries the canonical `matches`/`teams`/`team_players`/`players` joins.
   - **Key find**: canonical `matches.external_match_id` (with `record_source='tst_api'`) is exactly the 24-hex tronstats matchId Watch plays — so history rows link straight to `/watch/{id}`. Validated the query returns playable ids for a real player.
   - The dashboard's `GET /api/v1/players/{username}/matches` looked promising but is a **passthrough that does not filter by username** (returns the global recent list with null stats) — not used.
