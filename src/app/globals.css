@@ -1365,6 +1365,16 @@ input[type="range"] {
   background: rgba(198, 245, 52, 0.1);
 }
 
+.settings-group-label {
+  margin: 6px 0 -2px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
 .physics-field {
   display: grid;
   gap: 6px;

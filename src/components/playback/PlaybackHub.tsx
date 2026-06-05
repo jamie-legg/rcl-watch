@@ -1088,6 +1088,7 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
             <span>Field of view · {fov}°</span>
             <input type="range" min={30} max={110} step={1} value={fov} onChange={(event) => setFov(Number(event.target.value))} />
           </label>
+          <p className="settings-group-label">Custom camera only</p>
           <label className="physics-field">
             <span>Camera distance (BACK) · {cameraConfig.back}</span>
             <input
@@ -1355,7 +1356,7 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
               value={cameraMode}
               options={[
                 { value: "cinematic", label: "Cinematic" },
-                { value: "follow", label: "Follow" },
+                { value: "follow", label: "Custom" },
                 { value: "pov", label: "POV" },
                 { value: "noclip", label: "Noclip (free fly)" },
               ]}
