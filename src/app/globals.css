@@ -512,6 +512,28 @@ select {
   gap: 10px;
 }
 
+/* ---- match history meta ---- */
+.history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.history-server {
+  font-weight: 600;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-as {
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+}
+
 .pager {
   display: flex;
   align-items: center;

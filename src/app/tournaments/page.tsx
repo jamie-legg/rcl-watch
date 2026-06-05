@@ -71,6 +71,10 @@ export default async function TournamentsPage({ searchParams }: TournamentsProps
           View Tournament
           <em>.aarec replays</em>
         </Link>
+        <Link className="tab" href="/me" prefetch={false}>
+          My matches
+          <em>history</em>
+        </Link>
       </nav>
 
       <div className="list-controls">

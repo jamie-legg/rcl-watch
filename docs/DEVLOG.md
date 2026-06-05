@@ -2,6 +2,11 @@
 
 ## 2026-06-06
 
+- **Match history epic (B): authoritative "My matches" at `/me`, deep-linked to playback.** Built entirely inside Watch using its `rcl_db` access + shared Supabase session. `src/lib/history.ts` resolves the viewer the same way as the dashboard's `/api/profile/stats` (Supabase profile `username`/`ingame_email` + `linked_logins`), then queries the canonical `matches`/`teams`/`team_players`/`players` joins.
+  - **Key find**: canonical `matches.external_match_id` (with `record_source='tst_api'`) is exactly the 24-hex tronstats matchId Watch plays — so history rows link straight to `/watch/{id}`. Validated the query returns playable ids for a real player.
+  - The dashboard's `GET /api/v1/players/{username}/matches` looked promising but is a **passthrough that does not filter by username** (returns the global recent list with null stats) — not used.
+  - `/me` page + a "My matches" tab on the selector/tournament navs; each card shows mode/server/"as <name>" and the favourite/vote bar. Handles signed-out, profile-not-set-up, and no-matches states.
+
 - **Preferences epic (A): favourites + thumbs up/down + sort-by-rating, stored in `rcl_db`.** Watch holds only the Supabase anon key + session (browser), so preferences can't live client-side. Pattern (mirrors the dashboard's `/api/profile/stats`): server routes verify the shared Supabase session, then read/write the canonical **`rcl_db`** Postgres with `rcl_app`.
   - **Schema** (`db/migrations/0001_watch_match_reactions.sql`, applied to `rcl_db`): `watch_match_reactions` (profile_id = Supabase auth UUID, no FK — same convention as `linked_logins`; `match_kind` ∈ tst/fort/tournament/recording; `favorite`, `vote ∈ {-1,0,1}`) + `watch_match_rating_totals` aggregate kept current by a trigger. Verified the trigger (votes aggregate, cleanup on delete) and `rcl_app` grants.
   - **Server**: `src/lib/db.ts` (pg pool on `DATABASE_URL`), `src/lib/reactions.ts` (session→profileId, totals/mine reads, upsert), `POST/GET /api/reactions`.

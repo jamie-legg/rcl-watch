@@ -25,6 +25,12 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 - Wired into: home match cards + sort/Favourites (`src/app/page.tsx`), tournament + recording cards (`src/app/tournaments/...`), and the theater topbar (`PlaybackHub`).
 - Env: `DATABASE_URL` in `/etc/default/rcl-watch` (prod). Local dev: SSH tunnel `ssh -fNL 5433:localhost:5432 uk` + `DATABASE_URL=...@localhost:5433/rcl_db` in `.env.local`.
 
+## Match history (My matches)
+
+- `src/lib/history.ts` - resolves the signed-in user (Supabase profile + `linked_logins` in rcl_db) and queries the canonical `matches` joins. Returns rows keyed by `external_match_id` (tronstats matchId, `record_source='tst_api'`) so each links to `/watch/{id}`.
+- `src/app/me/page.tsx` - the "My matches" page (signed-out / profile-incomplete / empty states), with playback links + reaction bars. Linked as a "My matches" tab on the selector and tournament navs.
+- Note: the dashboard `GET /api/v1/players/{username}/matches` does NOT actually filter by player; history comes from rcl_db directly.
+
 ## RCL agent / wider context
 
 - `docs/RCL_AGENT.md` - how to query the dashboard's Cursor agent for cross-repo RCL context (schema, APIs, plans).
