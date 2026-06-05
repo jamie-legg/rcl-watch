@@ -15,6 +15,20 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 - `src/components/auth/AuthBar.tsx` - "Log in" / `profiles.username` + Sign out; on the selector/tournament headers and the theater topbar (compact).
 - Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public), optional `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN`. See `docs/DEPLOYMENT_NGINX.md` → Auth env.
 
+## Preferences (favourites / votes / ratings, in rcl_db)
+
+- `db/migrations/0001_watch_match_reactions.sql` - schema for the canonical `rcl_db` Postgres: `watch_match_reactions` (per-user, profile_id = Supabase UUID) + `watch_match_rating_totals` (trigger-maintained aggregate). Apply with `sudo -u postgres psql -d rcl_db -f ...`.
+- `src/lib/db.ts` - pg pool on `DATABASE_URL` (server-only; same DB as the dashboard/queue).
+- `src/lib/reactions.ts` - resolves the current Supabase user → profileId, reads totals/own-reactions, upserts. Server-only.
+- `src/app/api/reactions/route.ts` - `GET` (public totals + the viewer's own state) / `POST` (set favourite or vote; 401 if signed out).
+- `src/components/reactions/ReactionBar.tsx` - client favourite + up/down control; self-fetches when no initial state is passed (theater), else hydrates from server props (cards).
+- Wired into: home match cards + sort/Favourites (`src/app/page.tsx`), tournament + recording cards (`src/app/tournaments/...`), and the theater topbar (`PlaybackHub`).
+- Env: `DATABASE_URL` in `/etc/default/rcl-watch` (prod). Local dev: SSH tunnel `ssh -fNL 5433:localhost:5432 uk` + `DATABASE_URL=...@localhost:5433/rcl_db` in `.env.local`.
+
+## RCL agent / wider context
+
+- `docs/RCL_AGENT.md` - how to query the dashboard's Cursor agent for cross-repo RCL context (schema, APIs, plans).
+
 ## Code Map
 
 - `Makefile` - local dev, smoke-test, cleanup, cache, and release-check utilities.

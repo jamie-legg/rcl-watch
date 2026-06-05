@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuthBar } from "@/components/auth/AuthBar";
+import { ReactionBar } from "@/components/reactions/ReactionBar";
 import { getTournamentEntries, validateSegment, type RecordingEntry } from "@/lib/armaRecordings";
+import {
+  getCurrentProfileId,
+  getRatingTotals,
+  getUserReactions,
+  ZERO_TOTALS,
+} from "@/lib/reactions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +34,12 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
   } catch {
     failed = true;
   }
+
+  const profileId = await getCurrentProfileId();
+  const signedIn = Boolean(profileId);
+  const recIds = entries.map((e) => `${slug}/${e.file}`);
+  const totals = await getRatingTotals("recording", recIds);
+  const mine = profileId ? await getUserReactions(profileId, "recording", recIds) : new Map();
 
   return (
     <main className="selector-shell">
@@ -73,7 +86,16 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                     {entry.modified ? <span className="match-tag">{entry.modified}</span> : null}
                   </span>
                 </div>
-                <span className="match-go">Watch replay ▸</span>
+                <div className="match-card-foot">
+                  <span className="match-go">Watch replay ▸</span>
+                  <ReactionBar
+                    kind="recording"
+                    id={`${slug}/${entry.file}`}
+                    signedIn={signedIn}
+                    initialTotals={totals.get(`${slug}/${entry.file}`) ?? ZERO_TOTALS}
+                    initialMine={mine.get(`${slug}/${entry.file}`) ?? { favorite: false, vote: 0 }}
+                  />
+                </div>
               </Link>
             </li>
           ))}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuthBar } from "@/components/auth/AuthBar";
+import { ReactionBar } from "@/components/reactions/ReactionBar";
 import {
   CinematicScene,
   DEFAULT_CAMERA,
@@ -30,6 +31,9 @@ type PlaybackHubProps = {
   matchId: string;
   /** Override the log source. Defaults to the tronstats logs API for `matchId`. */
   logsUrl?: string;
+  /** Reaction namespace + id for the favourite/vote bar. */
+  reactionKind?: "tst" | "fort" | "tournament" | "recording";
+  reactionId?: string;
 };
 
 const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2, 4];
@@ -366,7 +370,7 @@ function IconButton({
   );
 }
 
-export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
+export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: PlaybackHubProps) {
   // Tournament recordings load from the aarec convert API; tronstats matches
   // from the logs API. Used to tailor copy and zone defaults.
   const isRecording = Boolean(logsUrl && logsUrl.includes("/api/aarec/"));
@@ -923,6 +927,9 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
           <strong>{currentRoundLabel}</strong>
         </div>
         <div className="topbar-stats">
+          {reactionKind && reactionId && (
+            <ReactionBar kind={reactionKind} id={reactionId} variant="theater" stopPropagation={false} />
+          )}
           <AuthBar compact />
           {cameraMode === "noclip" && <span className="noclip-hint">WASD move · E/Q up·down · drag to look · shift = sprint</span>}
           <span>{matchId}</span>

@@ -23,5 +23,12 @@ export default async function TournamentWatchPage({ params }: WatchPageProps) {
   }
 
   const logsUrl = `/api/aarec/${encodeURIComponent(slug)}/${encodeURIComponent(file)}`;
-  return <PlaybackHub matchId={`${slug}/${file}`} logsUrl={logsUrl} />;
+  return (
+    <PlaybackHub
+      matchId={`${slug}/${file}`}
+      logsUrl={logsUrl}
+      reactionKind="recording"
+      reactionId={`${slug}/${file}`}
+    />
+  );
 }
