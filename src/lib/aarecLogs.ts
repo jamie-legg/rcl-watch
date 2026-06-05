@@ -25,7 +25,7 @@ export function validateRecordingFile(file: string): string {
 }
 
 // Bump when the decoded JSON shape changes so stale caches are ignored.
-const CACHE_SCHEMA = "v2";
+const CACHE_SCHEMA = "v3";
 
 export function getAarecCachePath(tournament: string, file: string): string {
   const slug = validateSegment(tournament);

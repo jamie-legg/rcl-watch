@@ -56,13 +56,21 @@ export type DecodedZone = {
   color: [number, number, number];
 };
 
-/** A timeline event for the in-viewer console, bound to a round + elapsed time. */
+export type MatchEventKind = "round" | "kill" | "suicide" | "conquest" | "hold" | "chat";
+
+/**
+ * A timeline event for the in-viewer console, bound to a round + elapsed time.
+ * Parsed from the server's text console (descriptor 8) plus round markers.
+ * `team`/`points` drive tournament scoring; `actor` is the killer/chatter.
+ */
 export type MatchEvent = {
   roundId: string;
   time: number;
-  kind: "round" | "elimination";
+  kind: MatchEventKind;
   text: string;
   team?: string;
+  points?: number;
+  actor?: string;
 };
 
 /** The aarec convert API payload: gridpos logs plus recovered zones + events. */

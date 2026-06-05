@@ -684,7 +684,8 @@ function boundsForSamples(samples: PlaybackSample[]): ArenaBounds {
 }
 
 function colorForTeam(team: string, index: number): string {
-  const normalized = team.toLowerCase();
+  // Match both tronstats ("team_blue") and decoded aarec ("Team blue") names.
+  const normalized = team.toLowerCase().replace(/\s+/g, "_");
   const known = TEAM_COLORS.get(normalized);
 
   if (known) {

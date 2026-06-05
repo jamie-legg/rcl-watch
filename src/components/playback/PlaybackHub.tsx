@@ -366,6 +366,9 @@ function IconButton({
 }
 
 export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
+  // Tournament recordings load from the aarec convert API; tronstats matches
+  // from the logs API. Used to tailor copy and zone defaults.
+  const isRecording = Boolean(logsUrl && logsUrl.includes("/api/aarec/"));
   const [logs, setLogs] = useState<TstGridposLog[] | null>(null);
   const [scoreEvents, setScoreEvents] = useState<ScoreEvents | null>(null);
   const [cacheSource, setCacheSource] = useState("loading");
@@ -394,7 +397,9 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
   const [showRoster, setShowRoster] = useState(false);
   const [showPhysics, setShowPhysics] = useState(false);
   const [physics, setPhysics] = useState<PhysicsSettings>(DEFAULT_PHYSICS);
-  const [zone, setZone] = useState<ZoneSettings>(DEFAULT_ZONE);
+  // Recordings carry their own decoded zones, so the heuristic TST sumo zone is
+  // off by default for them (it would otherwise double-draw / mislead on fort).
+  const [zone, setZone] = useState<ZoneSettings>(isRecording ? { ...DEFAULT_ZONE, enabled: false } : DEFAULT_ZONE);
   // Zones + events recovered from a recording's network stream (aarec only).
   const [decodedZones, setDecodedZones] = useState<DecodedZone[]>([]);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
@@ -437,11 +442,12 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
   // Live match score from real kill (CycleDestroyLog) and zone-capture (ConquerLog) events.
   // Accumulates everything in already-finished rounds plus events in the current round up to
   // the playhead, so the board ticks up exactly as the action happens. score = kills*30 + zone.
+  // Tournament (.aarec) recordings carry the server's own point awards in their
+  // console events; prefer those for an exact, faithful ladle score.
+  const eventScoring = useMemo(() => matchEvents.some((e) => typeof e.points === "number"), [matchEvents]);
+
   const teamScores = useMemo(() => {
     const scores = new Map<string, TeamScore>();
-    if (!scoreEvents) {
-      return scores;
-    }
     const counted = (roundId: string, eventTime: number) => {
       const idx = roundIdToIndex.get(roundId);
       if (idx === undefined) {
@@ -457,6 +463,21 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
         zone: current.zone + addZone,
       });
     };
+
+    if (eventScoring) {
+      for (const event of matchEvents) {
+        if (!event.team || typeof event.points !== "number" || !counted(event.roundId, event.time)) {
+          continue;
+        }
+        const isKill = event.kind === "kill";
+        bump(event.team, event.points, isKill ? 1 : 0, isKill ? 0 : event.points);
+      }
+      return scores;
+    }
+
+    if (!scoreEvents) {
+      return scores;
+    }
     for (const kill of scoreEvents.kills) {
       if (counted(kill.roundId, kill.time)) {
         bump(kill.team, KILL_POINTS, 1, 0);
@@ -468,7 +489,7 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
       }
     }
     return scores;
-  }, [scoreEvents, roundIdToIndex, roundIndex, time]);
+  }, [eventScoring, matchEvents, scoreEvents, roundIdToIndex, roundIndex, time]);
 
   const seek = useCallback(
     (nextTime: number) => {
@@ -825,8 +846,9 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
           {` · cache: ${cacheSource}`}
         </p>
         <p>
-          First load streams the full log set from tronstats (often 15–20&nbsp;MB over a slow connection) and caches it
-          locally. Once cached, this match opens instantly.
+          {isRecording
+            ? "First load downloads the tournament recording and decodes its network stream into a replay. Once cached, it opens instantly."
+            : "First load streams the full log set from tronstats (often 15–20\u00a0MB over a slow connection) and caches it locally. Once cached, this match opens instantly."}
         </p>
       </main>
     );
@@ -916,23 +938,38 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
             </button>
           </header>
           <div className="roster-list">
-            {round.players.map((player) => (
-              <button
-                type="button"
-                key={player.username}
-                className={player.username === selectedPlayerName ? "player-pill selected" : "player-pill"}
-                onClick={() => {
-                  setSelectedPlayer(player.username);
-                  if (cameraMode === "cinematic") {
-                    setCameraMode("follow");
-                  }
-                }}
-              >
-                <span style={{ background: player.color, color: player.color }} />
-                <strong>{player.username}</strong>
-                <em>{player.team}</em>
-              </button>
-            ))}
+            {Array.from(
+              round.players.reduce((teams, player) => {
+                const list = teams.get(player.team) ?? [];
+                list.push(player);
+                teams.set(player.team, list);
+                return teams;
+              }, new Map<string, typeof round.players>()),
+            )
+              .sort((a, b) => (teamScores.get(b[0])?.score ?? 0) - (teamScores.get(a[0])?.score ?? 0) || a[0].localeCompare(b[0]))
+              .map(([team, members]) => (
+                <div key={team} className="roster-team">
+                  <p className="roster-team-name" style={{ color: members[0]?.color }}>
+                    {team}
+                  </p>
+                  {members.map((player) => (
+                    <button
+                      type="button"
+                      key={player.username}
+                      className={player.username === selectedPlayerName ? "player-pill selected" : "player-pill"}
+                      onClick={() => {
+                        setSelectedPlayer(player.username);
+                        if (cameraMode === "cinematic") {
+                          setCameraMode("follow");
+                        }
+                      }}
+                    >
+                      <span style={{ background: player.color, color: player.color }} />
+                      <strong>{player.username}</strong>
+                    </button>
+                  ))}
+                </div>
+              ))}
           </div>
         </aside>
       )}
@@ -945,6 +982,11 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
               ✕
             </button>
           </header>
+          {decodedZones.length > 0 && (
+            <p className="scoreboard-note">
+              Zones are decoded from this recording ({decodedZones.length} on the map), so the sumo controls below are ignored.
+            </p>
+          )}
           <label className="physics-field">
             <span>Wall length (odometer, 0 = infinite)</span>
             <input

@@ -8,6 +8,8 @@
  *   340 = gZone         (ZoneV1Sync,       gZone.proto) — win/fortress zones
  *   201 = ePlayerNetID  (PlayerNetIDSync,  ePlayer.proto)
  *   220 = eTeam         (TeamSync,         eTeam.proto)
+ *     8 = sn_consoleOut (ConsoleMessage,   nNetwork.proto) — the server's text
+ *         console (kills, conquests, holds, suicides, chat, round markers).
  *    24 = generic net-object sync envelope (nNetObject.cpp `net_sync`):
  *         [object_id word] + SECTION_Second of the object's class.
  *
@@ -32,6 +34,7 @@ export const DESCRIPTOR = {
   ZONE: 340,
   PLAYER: 201,
   TEAM: 220,
+  CONSOLE: 8,
   NET_SYNC: 24,
 } as const;
 
@@ -155,6 +158,10 @@ const TEAM_SYNC: StreamField[] = [
   END,
 ];
 
+// ConsoleMessage (nNetwork.proto): a single printed string. Not a net object,
+// so it's decoded directly from word 0 (no object id).
+const CONSOLE_MESSAGE: StreamField[] = [{ key: "message", type: "string" }, END];
+
 const SCHEMAS: Record<number, StreamField[]> = {
   [DESCRIPTOR.CYCLE]: CYCLE_SYNC,
   [DESCRIPTOR.ZONE]: ZONE_SYNC,
@@ -200,6 +207,40 @@ export type PlayerInfo = {
   teamName: string;
 };
 
+export type TeamInfo = {
+  name: string;
+  /** Short colour, 0..15 per channel. */
+  r: number;
+  g: number;
+  b: number;
+};
+
+/** A raw console line printed by the server, in stream order. */
+export type ConsoleSample = {
+  seq: number;
+  text: string;
+};
+
+const DEFAULT_TEAM_NAMES = new Set(["", "Empty team"]);
+
+/** Name a team by its colour, the way AA does. Channel scale is irrelevant
+ *  (normalised internally), so it works for 0..15 syncs and 0..1 zone colours. */
+export function teamColorName(r: number, g: number, b: number): string {
+  const max = Math.max(r, g, b);
+  if (max <= 0) return "";
+  const R = r / max;
+  const G = g / max;
+  const B = b / max;
+  if (B > 0.7 && R < 0.6 && G < 0.85) return "Team blue";
+  if (R > 0.7 && G > 0.7 && B < 0.5) return "Team gold";
+  if (R > 0.7 && G < 0.5 && B < 0.5) return "Team red";
+  if (G > 0.7 && R < 0.6 && B < 0.6) return "Team green";
+  if (R > 0.7 && B > 0.7 && G < 0.6) return "Team purple";
+  if (G > 0.7 && B > 0.7 && R < 0.6) return "Team cyan";
+  if (R > 0.7 && G > 0.4 && B < 0.5) return "Team orange";
+  return "";
+}
+
 /** Nested lookup: get(obj, "base", "base", "position"). */
 function get(obj: StreamObject | undefined, ...keys: string[]): StreamObject | undefined {
   let cur = obj;
@@ -210,34 +251,40 @@ function get(obj: StreamObject | undefined, ...keys: string[]): StreamObject | u
   return cur;
 }
 
-export type EliminationEvent = {
-  seq: number;
-  objectId: number;
-  playerId: number;
-  time: number;
-};
-
 export class AarecState {
   /** object id -> class descriptor (320/340/201/220). */
   private objClass = new Map<number, number>();
   /** cycle object id -> owning player object id. */
   private cycleOwner = new Map<number, number>();
-  /** cycle object id -> last seen alive flag, for death-edge detection. */
-  private cycleAlive = new Map<number, boolean>();
-  /** Monotonic stream-order counter shared by cycle + zone samples. */
+  /** Monotonic stream-order counter shared by cycle/zone/console samples. */
   private seq = 0;
 
   readonly samples: CycleSyncSample[] = [];
   readonly zoneSamples: ZoneSample[] = [];
-  readonly eliminations: EliminationEvent[] = [];
+  readonly consoleSamples: ConsoleSample[] = [];
   readonly players = new Map<number, PlayerInfo>();
-  readonly teams = new Map<number, string>();
+  readonly teams = new Map<number, TeamInfo>();
 
   feed(msg: StreamMessage): void {
-    if (msg.descriptor === DESCRIPTOR.NET_SYNC) {
+    if (msg.descriptor === DESCRIPTOR.CONSOLE) {
+      this.handleConsole(msg);
+    } else if (msg.descriptor === DESCRIPTOR.NET_SYNC) {
       this.handleSync(msg);
     } else if (SCHEMAS[msg.descriptor]) {
       this.handleCreate(msg);
+    }
+  }
+
+  private handleConsole(msg: StreamMessage): void {
+    if (msg.words.length === 0) return;
+    let decoded: StreamObject;
+    try {
+      decoded = decodeStream(msg.words, 0, CONSOLE_MESSAGE, SECTION_ALL);
+    } catch {
+      return;
+    }
+    if (typeof decoded.message === "string" && decoded.message) {
+      this.consoleSamples.push({ seq: this.seq, text: decoded.message });
     }
   }
 
@@ -302,16 +349,6 @@ export class AarecState {
     const time = asNumber(ngo?.last_time);
     const alive = decoded.alive !== false;
 
-    // Death edge: alive flips true -> false. Only the sync carries `alive`, so
-    // guard against the missing-field case (decoded.alive === undefined).
-    if (decoded.alive !== undefined) {
-      const prev = this.cycleAlive.get(objId);
-      if (prev === true && alive === false) {
-        this.eliminations.push({ seq: this.seq, objectId: objId, playerId: owner, time });
-      }
-      this.cycleAlive.set(objId, alive);
-    }
-
     this.samples.push({
       seq: this.seq++,
       objectId: objId,
@@ -368,19 +405,46 @@ export class AarecState {
   }
 
   private applyTeam(objId: number, decoded: StreamObject): void {
-    if (typeof decoded.name === "string" && decoded.name) {
-      this.teams.set(objId, decoded.name);
-    }
+    const prev = this.teams.get(objId);
+    const color = get(decoded, "color");
+    const name = typeof decoded.name === "string" && decoded.name ? decoded.name : prev?.name ?? "";
+    this.teams.set(objId, {
+      name,
+      r: color ? asNumber(color.r, prev?.r ?? 0) : prev?.r ?? 0,
+      g: color ? asNumber(color.g, prev?.g ?? 0) : prev?.g ?? 0,
+      b: color ? asNumber(color.b, prev?.b ?? 0) : prev?.b ?? 0,
+    });
   }
 
-  /** Resolve a player's display team name, preferring the live TeamSync name. */
+  /**
+   * Resolve a player's display team name. Teams whose synced name is the default
+   * "Empty team" (or blank) are named by their colour, the way AA labels teams.
+   */
   teamFor(playerId: number): string {
     const player = this.players.get(playerId);
     if (!player) return "";
-    return this.teams.get(player.teamId) || player.teamName || "";
+    const team = this.teams.get(player.teamId);
+    if (team) {
+      if (!DEFAULT_TEAM_NAMES.has(team.name)) return team.name;
+      const byColor = teamColorName(team.r, team.g, team.b);
+      if (byColor) return byColor;
+      if (team.name) return team.name;
+    }
+    return player.teamName || "";
   }
 
   nameFor(playerId: number): string {
     return this.players.get(playerId)?.name ?? "";
+  }
+
+  /** Resolve a (colour-code-stripped) player name to a team, for console kills. */
+  teamForName(cleanedName: string): string {
+    for (const [objId, player] of this.players) {
+      if (player.name.replace(/0x[0-9a-fA-F]{6}/g, "").trim() === cleanedName) {
+        const t = this.teamFor(objId);
+        if (t) return t;
+      }
+    }
+    return "";
   }
 }
