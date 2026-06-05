@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthBar } from "@/components/auth/AuthBar";
 import { getMatches, type MatchMode } from "@/lib/tronMatches";
 import type { MatchSummary, MatchTeam } from "@/types/tstMatch";
 
@@ -46,7 +47,10 @@ export default async function Home({ searchParams }: HomeProps) {
         <div className="brand-mark">
           Retrocycles <em>League</em>
         </div>
-        <span className="brand-tag">RCL · WATCH</span>
+        <div className="selector-head-actions">
+          <span className="brand-tag">RCL · WATCH</span>
+          <AuthBar />
+        </div>
       </header>
 
       <p className="eyebrow">Cinematic match playback</p>

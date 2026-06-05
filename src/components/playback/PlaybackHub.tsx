@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AuthBar } from "@/components/auth/AuthBar";
 import {
   CinematicScene,
   DEFAULT_CAMERA,
@@ -922,6 +923,7 @@ export function PlaybackHub({ matchId, logsUrl }: PlaybackHubProps) {
           <strong>{currentRoundLabel}</strong>
         </div>
         <div className="topbar-stats">
+          <AuthBar compact />
           {cameraMode === "noclip" && <span className="noclip-hint">WASD move · E/Q up·down · drag to look · shift = sprint</span>}
           <span>{matchId}</span>
           <span>cache: {cacheSource}</span>

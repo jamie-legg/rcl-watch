@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AuthBar } from "@/components/auth/AuthBar";
 import { getTournamentEntries, validateSegment, type RecordingEntry } from "@/lib/armaRecordings";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,10 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
         <div className="brand-mark">
           Retrocycles <em>League</em>
         </div>
-        <span className="brand-tag">RCL · WATCH</span>
+        <div className="selector-head-actions">
+          <span className="brand-tag">RCL · WATCH</span>
+          <AuthBar />
+        </div>
       </header>
 
       <p className="eyebrow">

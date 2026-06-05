@@ -114,6 +114,60 @@ select {
   border-bottom: 1px solid var(--line);
 }
 
+.selector-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.auth-bar.compact {
+  gap: 8px;
+}
+
+.auth-label {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.auth-button {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(198, 245, 52, 0.08);
+  color: var(--foreground);
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-button:hover {
+  background: rgba(198, 245, 52, 0.16);
+  border-color: var(--accent);
+}
+
+.auth-button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.auth-button.ghost:hover {
+  color: var(--foreground);
+  border-color: var(--line-strong);
+}
+
 .selector-title {
   margin: 0 0 22px;
   font-size: clamp(2.2rem, 6vw, 4rem);

@@ -8,6 +8,17 @@
 - **Public URL**: `https://watch.retrocyclesleague.com`
 - **Local bind**: `127.0.0.1:3004`
 
+## Auth env
+
+Watch shares the dashboard Supabase project. Set these in `/etc/default/rcl-watch` (or `.env.local` for dev):
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Optional: `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN=.retrocyclesleague.com` (auto-detected on `*.retrocyclesleague.com` hosts).
+
+Login flow: **Log in** on watch → `retrocyclesleague.com/auth/login?returnTo=https://watch.retrocyclesleague.com/...` → OAuth/password → callback redirects back to watch with the shared session cookie.
+
 ## One-time install
 
 ```bash

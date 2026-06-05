@@ -1,5 +1,13 @@
 # Devlog
 
+## 2026-06-06
+
+- **Auth foundation: shared RCL Supabase session (cookies across `.retrocyclesleague.com`).** Ported the auth scaffolding (Supabase SSR client/server/proxy helpers, cookie-domain scoping, `AuthBar`, dashboard login redirect with `returnTo` + `rcl_post_auth_redirect`) into the repo. Watch reuses the dashboard's `sb-*-auth-token` cookies, so a login on any RCL subdomain shows the user here immediately; **Log in** bounces to `retrocyclesleague.com/auth/login?returnTo=…` and back. `AuthBar` shows `profiles.username` (or email) + Sign out, placed on the match selector + tournament listings and the theater topbar (compact).
+  - **Reconciliation note:** this scaffolding existed only as *uncommitted* changes on the prod server (`/data/rcl/rcl-watch`, on an older `main`), missing our aarec/fort/camera work. Brought it into the repo so it's version-controlled; the server should now stash its local edits and pull instead of carrying drift.
+  - **Next 16 proxy convention:** used `src/proxy.ts` (exporting `proxy`) instead of the deprecated `middleware.ts` — the build emitted the `middleware`→`proxy` deprecation otherwise. The Supabase `updateSession` helper lives in `src/lib/supabase/middleware.ts` (a plain module, not the convention file).
+  - **Env:** `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public client keys) in `.env.local` (dev) / `/etc/default/rcl-watch` (prod); optional `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN`. Added `@supabase/ssr` + `@supabase/supabase-js`.
+  - **Not yet built (next steps of the epic):** per-user match history, and preferences (favourite matches, 👍/👎, sort tournaments by rating) — these need Supabase tables + RLS in the shared project; schema design pending.
+
 ## 2026-06-05
 
 - **Renamed the "Follow" camera to "Custom" and labelled its settings.** The camera select now reads "Custom" (it's the AA custom camera), and the Camera panel groups distance/height/pitch/turn-speed under a "Custom camera only" heading so it's clear those don't affect cinematic/POV/noclip (FOV stays global). Internal mode value left as `follow`.
