@@ -1056,6 +1056,97 @@ select {
   pointer-events: none;
 }
 
+/* Noclip saved-camera toolbar (top centre of the stage) */
+.noclip-cams {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 56;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 11, 20, 0.82);
+  backdrop-filter: blur(10px);
+  transition: opacity 240ms ease;
+}
+
+.noclip-cams.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.noclip-cam-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: rgba(198, 245, 52, 0.12);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.13s ease;
+}
+
+.noclip-cam-save:hover {
+  background: rgba(198, 245, 52, 0.22);
+}
+
+.noclip-cam-slot {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.noclip-cam-go {
+  min-width: 28px;
+  padding: 5px 9px;
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.noclip-cam-go:hover {
+  background: var(--accent);
+  color: #0a0e07;
+}
+
+.noclip-cam-del {
+  padding: 5px 7px;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.13s ease, background 0.13s ease;
+}
+
+.noclip-cam-del:hover {
+  color: #ff7591;
+  background: rgba(255, 84, 112, 0.1);
+}
+
+.noclip-cam-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding-left: 2px;
+}
+
 .theater-controls {
   position: absolute;
   inset: auto 0 0 0;

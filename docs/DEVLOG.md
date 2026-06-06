@@ -6,7 +6,9 @@
 
 - **Favourites are now global.** The home "★ Favourites" view used to just filter the current match-list page, so a match starred from history (`/me`) or any other page never appeared (the empty state even said "No favourites on this page"). Rebuilt it as a global view: `buildFavCards` reads every favourite via `listUserFavorites` (all kinds — tst/fort/tournament/recording), enriches tst/fort cards from the recent list pages then the user's own history, and renders compact openable cards for anything it can't enrich. Tournament/recording favourites link back to their tournament/replay routes.
 
-- **Music on by default.** The crys soundtrack now defaults to 10% volume and autoplays — immediately where the browser allows it, otherwise on the first user interaction anywhere on the page (fires once; manual pause/play still works after).
+- **Music synced to GO + randomised.** The crys soundtrack now opens on a random track (shuffle on), defaults to 10% volume, and kicks off the moment the match playhead starts — i.e. as the 3·2·1 countdown lands on GO (`playheadPlaying` prop) — instead of autoplaying on load. Manual pause/play still works after.
+
+- **Noclip saved camera views.** In the free-fly (noclip) camera you can now save the current pose ("Save view" in the top-centre toolbar) and jump back to any saved pose by clicking its numbered chip or pressing the matching number key (1–9). State lives in `PlaybackHub` and is bridged into `FreeCamera` via `captureCue`/`onCaptureCam`/`gotoCam` (with remount guards so re-entering noclip doesn't record/jump spuriously); up to 9 slots, each removable.
 
 - **Music player (crys soundtrack).** New `MusicPlayer` layered over the in-game audio — its own `<audio>` element, independent volume, shuffle/repeat, seek, a track list, an animated equaliser, and a floating now-playing chip when the panel is closed. Toggle via the `music` icon in the theater control bar. Tracks live in `public/music/` (gitignored; deployed to prod via scp) with a committed manifest at `src/components/playback/musicTracks.ts`. A missing file is skipped gracefully.
 

@@ -2,7 +2,7 @@
 
 import { ContactShadows, Environment, Html, PerspectiveCamera, useTexture } from "@react-three/drei";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 import { OBJLoader } from "three-stdlib";
 import {
@@ -22,6 +22,14 @@ import {
 import type { DecodedZone } from "@/types/tstLog";
 
 export type PlaybackCameraMode = "cinematic" | "follow" | "pov" | "noclip";
+
+/** A saved free-fly (noclip) camera pose the user can jump back to. */
+export type SavedCam = {
+  id: string;
+  pos: [number, number, number];
+  yaw: number;
+  pitch: number;
+};
 
 // Follow-camera rig mapped 1:1 to Armagetron's custom-camera settings (eCamera.cpp):
 //   CAMERA_CUSTOM_BACK / RISE / PITCH / TURN_SPEED. Defaults are the game's defaults.
@@ -68,6 +76,11 @@ type CinematicSceneProps = {
   decodedZones?: DecodedZone[];
   debug?: boolean;
   debugRef?: RefObject<HTMLDivElement | null>;
+  /** Noclip saved-camera bridge. */
+  savedCams?: SavedCam[];
+  captureCue?: number;
+  onCaptureCam?: (cam: Omit<SavedCam, "id">) => void;
+  gotoCam?: { pose: SavedCam; cue: number } | null;
 };
 
 export function CinematicScene({
@@ -82,6 +95,10 @@ export function CinematicScene({
   decodedZones = [],
   debug = false,
   debugRef,
+  savedCams = [],
+  captureCue = 0,
+  onCaptureCam,
+  gotoCam = null,
 }: CinematicSceneProps) {
   const snapshot = useMemo(() => getRoundSnapshot(round, time, physics), [round, time, physics]);
   const leans = useMemo(() => computeLeans(snapshot, round.bounds), [snapshot, round.bounds]);
@@ -116,7 +133,12 @@ export function CinematicScene({
       <fog attach="fog" args={["#0a1626", arenaSize * 0.9, arenaSize * 2.4]} />
       <PerspectiveCamera makeDefault fov={fov} position={[0, arenaSize * 0.6, arenaSize * 0.9]} />
       {cameraMode === "noclip" ? (
-        <FreeCamera />
+        <FreeCamera
+          savedCams={savedCams}
+          captureCue={captureCue}
+          onCaptureCam={onCaptureCam}
+          gotoCam={gotoCam}
+        />
       ) : (
         <CameraRig
           round={round}
@@ -201,7 +223,18 @@ function SkyDome({ arenaSize }: { arenaSize: number }) {
 }
 
 // Free-fly "noclip" camera: WASD to move, E/Q for up/down, Shift to sprint, click-drag to look.
-function FreeCamera() {
+// Saved poses (from the toolbar) can be recalled via the number keys 1–9.
+function FreeCamera({
+  savedCams = [],
+  captureCue = 0,
+  onCaptureCam,
+  gotoCam = null,
+}: {
+  savedCams?: SavedCam[];
+  captureCue?: number;
+  onCaptureCam?: (cam: Omit<SavedCam, "id">) => void;
+  gotoCam?: { pose: SavedCam; cue: number } | null;
+}) {
   const { camera, gl } = useThree();
   const keys = useRef(new Set<string>());
   const dragging = useRef(false);
@@ -209,6 +242,23 @@ function FreeCamera() {
   const yaw = useRef(0);
   const pitch = useRef(0);
   const ready = useRef(false);
+  const savedRef = useRef(savedCams);
+  const lastCapture = useRef(captureCue);
+  const lastGoto = useRef(gotoCam?.cue ?? 0);
+
+  useEffect(() => {
+    savedRef.current = savedCams;
+  }, [savedCams]);
+
+  const applyPose = useCallback(
+    (pose: SavedCam) => {
+      camera.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
+      yaw.current = pose.yaw;
+      pitch.current = pose.pitch;
+      ready.current = true;
+    },
+    [camera],
+  );
 
   useEffect(() => {
     const direction = new THREE.Vector3();
@@ -218,6 +268,25 @@ function FreeCamera() {
     ready.current = true;
   }, [camera]);
 
+  // Capture the current pose when the toolbar's "Save view" cue advances. Guarded so
+  // re-entering noclip (with a stale cue) doesn't record a spurious position.
+  useEffect(() => {
+    if (captureCue === lastCapture.current) return;
+    lastCapture.current = captureCue;
+    onCaptureCam?.({
+      pos: [camera.position.x, camera.position.y, camera.position.z],
+      yaw: yaw.current,
+      pitch: pitch.current,
+    });
+  }, [captureCue, onCaptureCam, camera]);
+
+  // Jump to a saved pose requested from the toolbar (same remount guard).
+  useEffect(() => {
+    if (!gotoCam || gotoCam.cue === lastGoto.current) return;
+    lastGoto.current = gotoCam.cue;
+    applyPose(gotoCam.pose);
+  }, [gotoCam, applyPose]);
+
   useEffect(() => {
     const dom = gl.domElement;
     const pressedKeys = keys.current;
@@ -226,6 +295,13 @@ function FreeCamera() {
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) {
         return;
+      }
+      if (/^[1-9]$/.test(event.key)) {
+        const pose = savedRef.current[Number(event.key) - 1];
+        if (pose) {
+          applyPose(pose);
+          return;
+        }
       }
       pressedKeys.add(event.key.toLowerCase());
     };
@@ -266,7 +342,7 @@ function FreeCamera() {
       window.removeEventListener("blur", onBlur);
       pressedKeys.clear();
     };
-  }, [gl]);
+  }, [gl, applyPose]);
 
   useFrame((_, delta) => {
     if (!ready.current) {

@@ -27,19 +27,24 @@ export function MusicPlayer({
   open,
   onToggle,
   hidden = false,
+  playheadPlaying = false,
 }: {
   open: boolean;
   onToggle: () => void;
   hidden?: boolean;
+  /** The match playhead is playing — used to kick the soundtrack off at GO. */
+  playheadPlaying?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [index, setIndex] = useState(0);
+  // Random starting track so every viewing opens on a different crys cut.
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * MUSIC_TRACKS.length));
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.1);
-  const [shuffle, setShuffle] = useState(false);
+  const [shuffle, setShuffle] = useState(true);
   const [repeat, setRepeat] = useState<RepeatMode>("all");
+  const autoStartedRef = useRef(false);
 
   const track = MUSIC_TRACKS[index];
 
@@ -79,33 +84,19 @@ export function MusicPlayer({
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  // On by default: try to autoplay immediately; if the browser blocks audio
-  // autoplay, start on the first user interaction anywhere on the page. Either
-  // way the user can still pause afterwards (this only fires once).
+  // Soundtrack kicks off (once) the moment the match playhead starts — i.e. as the
+  // 3·2·1 countdown lands on GO. The play click that armed the countdown counts as
+  // the user gesture, so the browser lets the audio start here.
   useEffect(() => {
+    if (!playheadPlaying || autoStartedRef.current) return;
     const el = audioRef.current;
     if (!el) return;
+    autoStartedRef.current = true;
     el.volume = volume;
-    let removed = false;
-    const remove = () => {
-      if (removed) return;
-      removed = true;
-      window.removeEventListener("pointerdown", onGesture);
-      window.removeEventListener("keydown", onGesture);
-    };
-    const onGesture = () => {
-      void el.play().catch(() => undefined);
-      remove();
-    };
-    el.play()
-      .then(remove)
-      .catch(() => {
-        window.addEventListener("pointerdown", onGesture);
-        window.addEventListener("keydown", onGesture);
-      });
-    return remove;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void el.play().catch(() => {
+      autoStartedRef.current = false;
+    });
+  }, [playheadPlaying, volume]);
 
   // Wire audio element events (external subscription → setState in callbacks).
   useEffect(() => {

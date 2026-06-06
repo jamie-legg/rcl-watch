@@ -8,6 +8,7 @@ import {
   DEFAULT_CAMERA,
   type CameraConfig,
   type PlaybackCameraMode,
+  type SavedCam,
 } from "@/components/playback/CinematicScene";
 import { useMatchAudio, DEFAULT_SOUND_CHANNELS, type SoundChannels } from "@/components/playback/useMatchAudio";
 import { MusicPlayer } from "@/components/playback/MusicPlayer";
@@ -425,6 +426,24 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
   const [soundChannels, setSoundChannels] = useState<SoundChannels>(DEFAULT_SOUND_CHANNELS);
   const [showSound, setShowSound] = useState(false);
   const [showMusic, setShowMusic] = useState(false);
+  // Noclip saved camera poses (recall via toolbar or number keys 1–9).
+  const [savedCams, setSavedCams] = useState<SavedCam[]>([]);
+  const [captureCue, setCaptureCue] = useState(0);
+  const [gotoCam, setGotoCam] = useState<{ pose: SavedCam; cue: number } | null>(null);
+  const gotoCounter = useRef(0);
+
+  const handleCaptureCam = useCallback((cam: Omit<SavedCam, "id">) => {
+    setSavedCams((list) =>
+      list.length >= 9
+        ? list
+        : [...list, { id: typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()), ...cam }],
+    );
+  }, []);
+
+  const gotoSavedCam = useCallback((pose: SavedCam) => {
+    gotoCounter.current += 1;
+    setGotoCam({ pose, cue: gotoCounter.current });
+  }, []);
 
   const theaterRef = useRef<HTMLDivElement>(null);
   const debugRef = useRef<HTMLDivElement>(null);
@@ -906,7 +925,37 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
           decodedZones={decodedZones}
           debug={showDebug}
           debugRef={debugRef}
+          savedCams={savedCams}
+          captureCue={captureCue}
+          onCaptureCam={handleCaptureCam}
+          gotoCam={gotoCam}
         />
+
+        {cameraMode === "noclip" && (
+          <div className={`noclip-cams${barHidden ? " is-hidden" : ""}`}>
+            <button type="button" className="noclip-cam-save" onClick={() => setCaptureCue((c) => c + 1)}>
+              + Save view
+            </button>
+            {savedCams.map((cam, i) => (
+              <span key={cam.id} className="noclip-cam-slot">
+                <button type="button" className="noclip-cam-go" onClick={() => gotoSavedCam(cam)} title={`Jump to view ${i + 1} (key ${i + 1})`}>
+                  {i + 1}
+                </button>
+                <button
+                  type="button"
+                  className="noclip-cam-del"
+                  aria-label={`Delete view ${i + 1}`}
+                  onClick={() => setSavedCams((list) => list.filter((c) => c.id !== cam.id))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {savedCams.length > 0 && (
+              <span className="noclip-cam-hint">press 1–{savedCams.length} to jump</span>
+            )}
+          </div>
+        )}
       </div>
 
       {showDebug && (
@@ -1224,7 +1273,12 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
         </aside>
       )}
 
-      <MusicPlayer open={showMusic} onToggle={() => setShowMusic((value) => !value)} hidden={barHidden} />
+      <MusicPlayer
+        open={showMusic}
+        onToggle={() => setShowMusic((value) => !value)}
+        hidden={barHidden}
+        playheadPlaying={playing}
+      />
 
       {showScoreboard && (
         <aside className="theater-roster theater-scoreboard">
