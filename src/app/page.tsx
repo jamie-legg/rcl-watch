@@ -88,14 +88,14 @@ export default async function Home({ searchParams }: HomeProps) {
         </div>
       </header>
 
-      <p className="eyebrow">Cinematic match playback</p>
-      <h1 className="selector-title">Pick a match</h1>
+      <p className="eyebrow">{favOnly ? "Your collection" : "Cinematic match playback"}</p>
+      <h1 className="selector-title">{favOnly ? "Favourites" : "Pick a match"}</h1>
 
       <nav className="selector-tabs" aria-label="Match type">
         {MODES.map((item) => (
           <Link
             key={item.id}
-            className={`tab${item.id === mode ? " active" : ""}`}
+            className={`tab${!favOnly && item.id === mode ? " active" : ""}`}
             href={item.id === "tst" ? "/" : `/?mode=${item.id}`}
             prefetch={false}
           >
@@ -114,20 +114,22 @@ export default async function Home({ searchParams }: HomeProps) {
       </nav>
 
       <div className="list-controls">
-        <div className="seg" role="group" aria-label="Sort">
-          <Link className={`seg-btn${sort === "recent" ? " active" : ""}`} href={listHref(mode, { sort: "recent", fav: favOnly })} prefetch={false}>
-            Recent
-          </Link>
-          <Link className={`seg-btn${sort === "rating" ? " active" : ""}`} href={listHref(mode, { sort: "rating", fav: favOnly })} prefetch={false}>
-            Top rated
-          </Link>
-        </div>
+        {!favOnly && (
+          <div className="seg" role="group" aria-label="Sort">
+            <Link className={`seg-btn${sort === "recent" ? " active" : ""}`} href={listHref(mode, { sort: "recent", fav: favOnly })} prefetch={false}>
+              Recent
+            </Link>
+            <Link className={`seg-btn${sort === "rating" ? " active" : ""}`} href={listHref(mode, { sort: "rating", fav: favOnly })} prefetch={false}>
+              Top rated
+            </Link>
+          </div>
+        )}
         <Link
           className={`seg-btn fav-toggle${favOnly ? " active" : ""}`}
           href={listHref(mode, { sort, fav: !favOnly })}
           prefetch={false}
         >
-          ★ Favourites
+          ★ {favOnly ? "Showing favourites · show all" : "Favourites"}
         </Link>
       </div>
 

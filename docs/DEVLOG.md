@@ -4,6 +4,8 @@
 
 - **Account drawer redesign.** Reworked the `AccountMenu` drawer into a proper modern sidebar (cues from the Hub: near-black canvas, bright lime accent, hairline borders, subtle accent-tinted hovers): brand bar + icon close, an identity card with a gradient avatar and inline Log in, iconned nav rows (each with an icon tile, label/hint, and chevron/↗) for Watch + RCL sections, and a bottom-pinned Sign out (red-tinted hover). Flex column with a scrollable middle so it scales on short screens.
 
+- **Favourites view tidy-up.** On `?fav=1` the page now titles itself "Favourites" and hides the irrelevant "pick a match" controls — the Recent/Top-rated sort is gone, the TST/Fortress tab no longer shows an active filter highlight, and the Favourites toggle reads "Showing favourites · show all".
+
 - **Favourites are now global.** The home "★ Favourites" view used to just filter the current match-list page, so a match starred from history (`/me`) or any other page never appeared (the empty state even said "No favourites on this page"). Rebuilt it as a global view: `buildFavCards` reads every favourite via `listUserFavorites` (all kinds — tst/fort/tournament/recording), enriches tst/fort cards from the recent list pages then the user's own history, and renders compact openable cards for anything it can't enrich. Tournament/recording favourites link back to their tournament/replay routes.
 
 - **Music synced to GO + randomised.** The crys soundtrack now opens on a random track (shuffle on), defaults to 10% volume, and kicks off the moment the match playhead starts — i.e. as the 3·2·1 countdown lands on GO (`playheadPlaying` prop) — instead of autoplaying on load. Manual pause/play still works after.
