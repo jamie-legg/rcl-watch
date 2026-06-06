@@ -1576,6 +1576,278 @@ input[type="range"] {
   left: 18px;
 }
 
+/* ---- music player (crys soundtrack) ---- */
+.theater-music {
+  right: 18px;
+  top: 90px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.music-by {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.music-now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(120deg, rgba(198, 245, 52, 0.1), rgba(120, 80, 255, 0.12));
+}
+
+.music-now-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.music-now-text strong {
+  font-size: 0.96rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-now-text span {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.music-scrub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.music-scrub input {
+  flex: 1;
+}
+
+.music-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.music-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.13s ease, border-color 0.13s ease, background 0.13s ease;
+}
+
+.music-btn:hover {
+  color: var(--foreground);
+  border-color: var(--line-strong);
+}
+
+.music-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(198, 245, 52, 0.1);
+}
+
+.music-btn--play {
+  width: 48px;
+  height: 48px;
+  color: #0a0e07;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.music-btn--play:hover {
+  color: #0a0e07;
+  filter: brightness(1.08);
+}
+
+.music-repeat-one {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.music-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.music-volume input {
+  flex: 1;
+}
+
+.music-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.music-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.music-track:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--foreground);
+}
+
+.music-track.current {
+  color: var(--accent);
+}
+
+.music-track-i {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.74rem;
+}
+
+.music-track-title {
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Animated equaliser */
+.music-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  flex: none;
+}
+
+.music-eq i {
+  width: 3px;
+  height: 30%;
+  border-radius: 2px;
+  background: var(--accent);
+  transform-origin: bottom;
+}
+
+.music-eq.on i {
+  animation: music-bounce 0.9s ease-in-out infinite;
+}
+
+.music-eq.on i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.music-eq.on i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.music-eq.on i:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+@keyframes music-bounce {
+  0%,
+  100% {
+    height: 25%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+/* Floating now-playing chip (panel closed) */
+.music-chip {
+  position: absolute;
+  left: 18px;
+  bottom: 132px;
+  z-index: 55;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 280px;
+  padding: 7px 14px 7px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(8, 11, 20, 0.86);
+  backdrop-filter: blur(12px);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: opacity 240ms ease, border-color 0.13s ease;
+}
+
+.music-chip:hover {
+  border-color: var(--accent);
+}
+
+.music-chip.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.music-chip-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #0a0e07;
+}
+
+.music-chip-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-chip-text em {
+  font-style: normal;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 .theater-roster.is-hidden,
 .theater-physics.is-hidden {
   opacity: 0;

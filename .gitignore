@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local match cache
 .cache/
+
+# Crys music tracks (deployed via scp, not committed)
+public/music/

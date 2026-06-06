@@ -2,6 +2,8 @@
 
 ## 2026-06-06
 
+- **Music player (crys soundtrack).** New `MusicPlayer` layered over the in-game audio — its own `<audio>` element, independent volume, shuffle/repeat, seek, a track list, an animated equaliser, and a floating now-playing chip when the panel is closed. Toggle via the `music` icon in the theater control bar. Tracks live in `public/music/` (gitignored; deployed to prod via scp) with a committed manifest at `src/components/playback/musicTracks.ts`. A missing file is skipped gracefully.
+
 - **Account drawer.** Replaced the inline `AuthBar` everywhere with a single top-right icon (`AccountMenu`) that opens a portaled right-hand drawer: user/avatar + Log in / Sign out, Watch links (Matches, Tournaments, My matches, Favourites), and external RCL links (Dashboard, Hub, Resource). Portaled to `document.body` so it overlays cleanly from the theater too. Deleted `AuthBar` and its CSS.
 
 - **Theater topbar cleanup.** The reaction + auth controls were crammed inline with the mono debug stats and weren't reliably clickable (`.theater-topbar` is `pointer-events: none`). Split into a right-aligned glass **actions pill** (favourite · up/down · divider · user/sign-out, `pointer-events: auto`) above a small dimmed **tech row** (matchId · cache · logs). Reaction buttons render flat inside the pill instead of pills-within-a-pill.

@@ -10,6 +10,7 @@ import {
   type PlaybackCameraMode,
 } from "@/components/playback/CinematicScene";
 import { useMatchAudio, DEFAULT_SOUND_CHANNELS, type SoundChannels } from "@/components/playback/useMatchAudio";
+import { MusicPlayer } from "@/components/playback/MusicPlayer";
 import {
   DEFAULT_PHYSICS,
   DEFAULT_ZONE,
@@ -179,6 +180,7 @@ type IconName =
   | "chevronDown"
   | "chevronUp"
   | "console"
+  | "music"
   | "next";
 
 // Crisp single-weight line icons (Lucide-derived) so the control bar reads like a modern
@@ -338,6 +340,14 @@ function Icon({ name }: { name: IconName }) {
           <line x1="13" x2="17" y1="15" y2="15" />
         </svg>
       );
+    case "music":
+      return (
+        <svg {...common}>
+          <path d="M9 18V5l12-2v13" />
+          <circle cx="6" cy="18" r="3" fill="currentColor" stroke="none" />
+          <circle cx="18" cy="16" r="3" fill="currentColor" stroke="none" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -414,6 +424,7 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
   const [volume, setVolume] = useState(0.7);
   const [soundChannels, setSoundChannels] = useState<SoundChannels>(DEFAULT_SOUND_CHANNELS);
   const [showSound, setShowSound] = useState(false);
+  const [showMusic, setShowMusic] = useState(false);
 
   const theaterRef = useRef<HTMLDivElement>(null);
   const debugRef = useRef<HTMLDivElement>(null);
@@ -1213,6 +1224,8 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
         </aside>
       )}
 
+      <MusicPlayer open={showMusic} onToggle={() => setShowMusic((value) => !value)} hidden={barHidden} />
+
       {showScoreboard && (
         <aside className="theater-roster theater-scoreboard">
           <header>
@@ -1401,6 +1414,12 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
               label="Sound settings"
               onClick={() => setShowSound((value) => !value)}
               active={showSound}
+            />
+            <IconButton
+              icon="music"
+              label="Music · crys"
+              onClick={() => setShowMusic((value) => !value)}
+              active={showMusic}
             />
             <IconButton
               icon="physics"
