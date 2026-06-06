@@ -2,6 +2,8 @@
 
 ## 2026-06-06
 
+- **Favourites are now global.** The home "★ Favourites" view used to just filter the current match-list page, so a match starred from history (`/me`) or any other page never appeared (the empty state even said "No favourites on this page"). Rebuilt it as a global view: `buildFavCards` reads every favourite via `listUserFavorites` (all kinds — tst/fort/tournament/recording), enriches tst/fort cards from the recent list pages then the user's own history, and renders compact openable cards for anything it can't enrich. Tournament/recording favourites link back to their tournament/replay routes.
+
 - **Music player (crys soundtrack).** New `MusicPlayer` layered over the in-game audio — its own `<audio>` element, independent volume, shuffle/repeat, seek, a track list, an animated equaliser, and a floating now-playing chip when the panel is closed. Toggle via the `music` icon in the theater control bar. Tracks live in `public/music/` (gitignored; deployed to prod via scp) with a committed manifest at `src/components/playback/musicTracks.ts`. A missing file is skipped gracefully.
 
 - **Account drawer.** Replaced the inline `AuthBar` everywhere with a single top-right icon (`AccountMenu`) that opens a portaled right-hand drawer: user/avatar + Log in / Sign out, Watch links (Matches, Tournaments, My matches, Favourites), and external RCL links (Dashboard, Hub, Resource). Portaled to `document.body` so it overlays cleanly from the theater too. Deleted `AuthBar` and its CSS.

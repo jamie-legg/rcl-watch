@@ -22,7 +22,8 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 - `src/lib/reactions.ts` - resolves the current Supabase user → profileId, reads totals/own-reactions, upserts. Server-only.
 - `src/app/api/reactions/route.ts` - `GET` (public totals + the viewer's own state) / `POST` (set favourite or vote; 401 if signed out).
 - `src/components/reactions/ReactionBar.tsx` - client favourite + up/down control; self-fetches when no initial state is passed (theater), else hydrates from server props (cards).
-- Wired into: home match cards + sort/Favourites (`src/app/page.tsx`), tournament + recording cards (`src/app/tournaments/...`), and the theater topbar (`PlaybackHub`).
+- Wired into: home match cards + sort (`src/app/page.tsx`), tournament + recording cards (`src/app/tournaments/...`), and the theater topbar (`PlaybackHub`).
+- `?fav=1` on the home page is a GLOBAL favourites view (not a per-page filter): `buildFavCards` lists every favourite via `listUserFavorites` across all kinds, enriches tst/fort from recent list pages + the user's history, and renders compact cards for the rest. So a match starred anywhere (e.g. from `/me`) appears here.
 - Env: `DATABASE_URL` in `/etc/default/rcl-watch` (prod). Local dev: SSH tunnel `ssh -fNL 5433:localhost:5432 uk` + `DATABASE_URL=...@localhost:5433/rcl_db` in `.env.local`.
 
 ## Match history (My matches)
