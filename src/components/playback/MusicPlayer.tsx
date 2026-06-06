@@ -37,7 +37,7 @@ export function MusicPlayer({
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.55);
+  const [volume, setVolume] = useState(0.1);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("all");
 
@@ -78,6 +78,34 @@ export function MusicPlayer({
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
+
+  // On by default: try to autoplay immediately; if the browser blocks audio
+  // autoplay, start on the first user interaction anywhere on the page. Either
+  // way the user can still pause afterwards (this only fires once).
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.volume = volume;
+    let removed = false;
+    const remove = () => {
+      if (removed) return;
+      removed = true;
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("keydown", onGesture);
+    };
+    const onGesture = () => {
+      void el.play().catch(() => undefined);
+      remove();
+    };
+    el.play()
+      .then(remove)
+      .catch(() => {
+        window.addEventListener("pointerdown", onGesture);
+        window.addEventListener("keydown", onGesture);
+      });
+    return remove;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Wire audio element events (external subscription → setState in callbacks).
   useEffect(() => {
