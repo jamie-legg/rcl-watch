@@ -2,6 +2,8 @@
 
 ## 2026-06-06
 
+- **Account drawer.** Replaced the inline `AuthBar` everywhere with a single top-right icon (`AccountMenu`) that opens a portaled right-hand drawer: user/avatar + Log in / Sign out, Watch links (Matches, Tournaments, My matches, Favourites), and external RCL links (Dashboard, Hub, Resource). Portaled to `document.body` so it overlays cleanly from the theater too. Deleted `AuthBar` and its CSS.
+
 - **Theater topbar cleanup.** The reaction + auth controls were crammed inline with the mono debug stats and weren't reliably clickable (`.theater-topbar` is `pointer-events: none`). Split into a right-aligned glass **actions pill** (favourite · up/down · divider · user/sign-out, `pointer-events: auto`) above a small dimmed **tech row** (matchId · cache · logs). Reaction buttons render flat inside the pill instead of pills-within-a-pill.
 
 - **Match history epic (B): authoritative "My matches" at `/me`, deep-linked to playback.** Built entirely inside Watch using its `rcl_db` access + shared Supabase session. `src/lib/history.ts` resolves the viewer the same way as the dashboard's `/api/profile/stats` (Supabase profile `username`/`ingame_email` + `linked_logins`), then queries the canonical `matches`/`teams`/`team_players`/`players` joins.

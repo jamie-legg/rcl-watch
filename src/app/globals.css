@@ -120,52 +120,218 @@ select {
   gap: 12px;
 }
 
-.auth-bar {
+/* ---- account menu (trigger + right drawer) ---- */
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.account-trigger:hover {
+  color: var(--foreground);
+  border-color: var(--accent);
+  background: rgba(198, 245, 52, 0.1);
+}
+
+.account-trigger.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0e07;
+}
+
+.account-trigger-initial {
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.account-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(2, 4, 10, 0);
+  backdrop-filter: blur(0);
+  transition: background 0.2s ease, backdrop-filter 0.2s ease;
+}
+
+.account-overlay.open {
+  background: rgba(2, 4, 10, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.account-drawer {
+  width: min(340px, 86vw);
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  background: linear-gradient(180deg, var(--panel-strong, #0b0f1a), rgba(5, 8, 16, 0.98));
+  border-left: 1px solid var(--line-strong);
+  box-shadow: -30px 0 80px rgba(0, 0, 0, 0.6);
+  transform: translateX(100%);
+  animation: account-slide-in 0.22s ease forwards;
+}
+
+@keyframes account-slide-in {
+  to {
+    transform: translateX(0);
+  }
+}
+
+.account-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 34px;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
 }
 
-.auth-bar.compact {
-  gap: 8px;
+.account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 1.1rem;
 }
 
-.auth-label {
-  max-width: 12rem;
+.account-avatar.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0e07;
+}
+
+.account-id {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-id strong {
+  font-size: 0.98rem;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.82rem;
-  color: var(--muted);
 }
 
-.auth-button {
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: rgba(198, 245, 52, 0.08);
-  color: var(--foreground);
-  padding: 7px 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
+.account-id span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-close {
+  margin-left: auto;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  padding: 4px;
+  line-height: 1;
 }
 
-.auth-button:hover {
-  background: rgba(198, 245, 52, 0.16);
-  border-color: var(--accent);
+.account-close:hover {
+  color: var(--foreground);
 }
 
-.auth-button.ghost {
+.account-action {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #0a0e07;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.account-action:hover {
+  filter: brightness(1.08);
+}
+
+.account-action.ghost {
   background: transparent;
-  border-color: var(--line);
+  border-color: var(--line-strong);
+  color: var(--foreground);
+}
+
+.account-action.ghost:hover {
+  border-color: var(--accent);
+  filter: none;
+  background: rgba(198, 245, 52, 0.08);
+}
+
+.account-section {
+  margin: 20px 0 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.account-links {
+  display: grid;
+  gap: 6px;
+}
+
+.account-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.13s ease, border-color 0.13s ease;
+}
+
+.account-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--line-strong);
+}
+
+.account-link span {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.account-link em {
+  font-style: normal;
+  font-size: 0.74rem;
   color: var(--muted);
 }
 
-.auth-button.ghost:hover {
-  color: var(--foreground);
-  border-color: var(--line-strong);
+.account-link.external span::after {
+  content: " ↗";
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .selector-title {
@@ -537,9 +703,6 @@ select {
   margin-left: 2px;
 }
 
-.topbar-actions .auth-button {
-  padding: 5px 12px;
-}
 
 /* ---- match history meta ---- */
 .history-meta {
@@ -768,13 +931,14 @@ select {
   pointer-events: auto;
 }
 
-.topbar-actions .auth-bar {
-  min-height: 0;
+.topbar-actions .account-trigger {
+  width: 30px;
+  height: 30px;
 }
 
-.topbar-actions .reaction-bar + .auth-bar {
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
+.topbar-actions .reaction-bar {
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
 }
 
 .topbar-tech {

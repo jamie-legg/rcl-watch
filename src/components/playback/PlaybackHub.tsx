@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AuthBar } from "@/components/auth/AuthBar";
+import { AccountMenu } from "@/components/account/AccountMenu";
 import { ReactionBar } from "@/components/reactions/ReactionBar";
 import {
   CinematicScene,
@@ -931,7 +931,7 @@ export function PlaybackHub({ matchId, logsUrl, reactionKind, reactionId }: Play
             {reactionKind && reactionId && (
               <ReactionBar kind={reactionKind} id={reactionId} variant="theater" stopPropagation={false} />
             )}
-            <AuthBar compact />
+            <AccountMenu />
           </div>
           <div className="topbar-tech">
             {cameraMode === "noclip" && <span className="noclip-hint">WASD · E/Q up·down · drag look · shift sprint</span>}

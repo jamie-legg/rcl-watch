@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AuthBar } from "@/components/auth/AuthBar";
+import { AccountMenu } from "@/components/account/AccountMenu";
 import { ReactionBar } from "@/components/reactions/ReactionBar";
 import { getTournamentEntries, validateSegment, type RecordingEntry } from "@/lib/armaRecordings";
 import {
@@ -49,7 +49,7 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
         </div>
         <div className="selector-head-actions">
           <span className="brand-tag">RCL · WATCH</span>
-          <AuthBar />
+          <AccountMenu />
         </div>
       </header>
 

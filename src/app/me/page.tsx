@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AuthBar } from "@/components/auth/AuthBar";
+import { AccountMenu } from "@/components/account/AccountMenu";
 import { ReactionBar } from "@/components/reactions/ReactionBar";
 import { getMatchHistory } from "@/lib/history";
 import {
@@ -52,7 +52,7 @@ export default async function MyMatchesPage() {
         </div>
         <div className="selector-head-actions">
           <span className="brand-tag">RCL · WATCH</span>
-          <AuthBar />
+          <AccountMenu />
         </div>
       </header>
 

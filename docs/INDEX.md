@@ -12,7 +12,7 @@ This project is a Next.js playback hub for cached Armagetron match logs.
 - `src/proxy.ts` - Next 16 proxy convention (replaces deprecated `middleware.ts`); refreshes the shared Supabase session cookies on every non-asset request via `updateSession`.
 - `src/lib/supabase/client.ts` / `server.ts` / `middleware.ts` - Supabase SSR browser/server/proxy clients reading the shared `sb-*` cookies. `cookie-domain.ts` scopes auth cookies to `.retrocyclesleague.com` so login carries across RCL subdomains.
 - `src/lib/auth/client-auth-navigation.ts` - builds the dashboard login URL (`retrocyclesleague.com/auth/login?returnTo=…`), sets the shared `rcl_post_auth_redirect` cookie, validates redirect targets to RCL hosts.
-- `src/components/auth/AuthBar.tsx` - "Log in" / `profiles.username` + Sign out; on the selector/tournament headers and the theater topbar (compact).
+- `src/components/account/AccountMenu.tsx` - top-right icon that opens a portaled right-hand drawer: auth (login / profile / sign out), Watch links (Matches, Tournaments, My matches, Favourites), and external RCL links (Dashboard, Hub, Resource). Replaces the old inline AuthBar on every header + the theater topbar.
 - Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public), optional `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN`. See `docs/DEPLOYMENT_NGINX.md` → Auth env.
 
 ## Preferences (favourites / votes / ratings, in rcl_db)
